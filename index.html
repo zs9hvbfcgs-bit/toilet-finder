@@ -15,8 +15,8 @@
     --card-bg: #ffffff;
     --text: #1b1f23;
     --text-muted: #6b7280;
-    --primary: #0d9488;
-    --primary-dark: #0f766e;
+    --primary: #1d4ed8;
+    --primary-dark: #1e40af;
     --border: #e5e7eb;
     --shadow: 0 1px 3px rgba(0,0,0,0.08);
     --danger: #dc2626;
@@ -263,13 +263,13 @@
     gap: 6px;
   }
   .tag {
-    background: #ecfdf5;
+    background: #dbeafe;
     color: var(--primary-dark);
     padding: 1px 7px;
     border-radius: 6px;
     font-size: 11.5px;
   }
-  html.dark-mode .tag { background: #123a35; color: #5eead4; }
+  html.dark-mode .tag { background: #1e3a5f; color: #93c5fd; }
   .tag.warn { background: #fef3c7; color: #92400e; }
   html.dark-mode .tag.warn { background: #3a2e12; color: #fbbf24; }
 
@@ -548,7 +548,7 @@
   // كل وسيلة تنقل تتبع شبكة طرق مختلفة (سيارات، دراجات، ممرات مشاة)
   const OSRM_BASE = "https://router.project-osrm.org/route/v1";
   const OSRM_PROFILES = { walk: "foot", bike: "cycling", car: "driving" };
-  const ROUTE_COLORS = { walk: "#0d9488", bike: "#7c3aed", car: "#2563eb" };
+  const ROUTE_COLOR = "#dc2626";
 
   function formatSeconds(sec) {
     const mins = Math.round(sec / 60);
@@ -587,7 +587,7 @@
 
     const myToken = ++routeRequestToken;
     const origin = { lat: currentLat, lon: currentLon };
-    const color = ROUTE_COLORS[currentMode] || ROUTE_COLORS.walk;
+    const color = ROUTE_COLOR;
 
     // خط مستقيم مؤقت ريثما يوصل المسار الفعلي على الطرق
     routeLine = L.polyline(
@@ -645,7 +645,7 @@
   }
 
   const CATEGORY_ICONS = {
-    toilet: makePlaceIcon("#0d9488", "🚻"),
+    toilet: makePlaceIcon("#1d4ed8", "🚻"),
     mosque: makePlaceIcon("#7c3aed", "🕌"),
     cafe: makePlaceIcon("#b45309", "☕"),
     restaurant: makePlaceIcon("#db2777", "🍽️"),
@@ -1119,7 +1119,7 @@
           place.distance != null
             ? formatDistance(place.distance) + " · " + formatDuration(place.distance, speedKmh) + " تقريبًا<br>"
             : ""
-        }<a href="${getDirectionsUrl(place)}" target="_blank" rel="noopener" style="color:#0d9488;font-weight:600;">🧭 الاتجاهات</a>`
+        }<a href="${getDirectionsUrl(place)}" target="_blank" rel="noopener" style="color:#1d4ed8;font-weight:600;">🧭 الاتجاهات</a>`
       );
       marker.on("click", () => {
         document.querySelectorAll(".place-card").forEach((c) => c.classList.remove("active"));
