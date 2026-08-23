@@ -20,6 +20,16 @@
     --border: #e5e7eb;
     --shadow: 0 1px 3px rgba(0,0,0,0.08);
     --danger: #dc2626;
+    --star: #f59e0b;
+  }
+
+  html.dark-mode {
+    --bg: #0f1417;
+    --card-bg: #1a2226;
+    --text: #e8edf0;
+    --text-muted: #98a3a8;
+    --border: #2a3338;
+    --shadow: 0 1px 3px rgba(0,0,0,0.4);
   }
 
   * { box-sizing: border-box; }
@@ -43,34 +53,59 @@
   header {
     background: var(--primary);
     color: #fff;
-    padding: 14px 16px;
+    padding: 12px 16px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: 8px;
     flex-shrink: 0;
     box-shadow: var(--shadow);
     z-index: 10;
   }
 
   header h1 {
-    font-size: 18px;
+    font-size: 17px;
     margin: 0;
     font-weight: 700;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    white-space: nowrap;
   }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .icon-btn {
+    background: rgba(255,255,255,0.15);
+    border: none;
+    color: #fff;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    font-size: 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .icon-btn:active { background: rgba(255,255,255,0.3); }
+  .icon-btn.active { background: #fff; color: var(--primary); }
 
   #refreshBtn {
     background: rgba(255,255,255,0.15);
     border: none;
     color: #fff;
-    padding: 8px 14px;
+    padding: 8px 12px;
     border-radius: 8px;
-    font-size: 14px;
+    font-size: 13px;
     cursor: pointer;
     white-space: nowrap;
+    flex-shrink: 0;
   }
   #refreshBtn:active { background: rgba(255,255,255,0.3); }
   #refreshBtn:disabled { opacity: 0.6; cursor: default; }
@@ -91,9 +126,54 @@
     padding: 6px 16px;
     font-size: 12px;
     color: var(--text-muted);
-    background: #f0fdfa;
+    background: var(--card-bg);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
+  }
+
+  #toolbar {
+    padding: 10px 16px;
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  #searchInput {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: inherit;
+  }
+  #searchInput::placeholder { color: var(--text-muted); }
+
+  #filterChips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .chip {
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text-muted);
+    font-size: 12.5px;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: inherit;
+  }
+  .chip.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
   }
 
   main {
@@ -104,13 +184,14 @@
   }
 
   #map {
-    flex: 1 1 45%;
-    min-height: 220px;
+    flex: 1 1 40%;
+    min-height: 200px;
     width: 100%;
   }
+  #map.add-mode-cursor { cursor: crosshair; }
 
   #listWrap {
-    flex: 1 1 55%;
+    flex: 1 1 60%;
     overflow-y: auto;
     background: var(--bg);
     -webkit-overflow-scrolling: touch;
@@ -138,8 +219,8 @@
     gap: 10px;
     transition: background 0.15s;
   }
-  .place-card:active { background: #f0fdfa; }
-  .place-card.active { border-color: var(--primary); background: #f0fdfa; }
+  .place-card:active { background: var(--bg); }
+  .place-card.active { border-color: var(--primary); background: var(--bg); }
 
   .place-info { min-width: 0; }
   .place-name {
@@ -164,9 +245,19 @@
     border-radius: 6px;
     font-size: 11.5px;
   }
+  html.dark-mode .tag { background: #123a35; color: #5eead4; }
+  .tag.warn { background: #fef3c7; color: #92400e; }
+  html.dark-mode .tag.warn { background: #3a2e12; color: #fbbf24; }
+
+  .place-side {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+  }
 
   .place-distance {
-    flex-shrink: 0;
     text-align: center;
     background: var(--primary);
     color: #fff;
@@ -176,6 +267,24 @@
     font-weight: 700;
     white-space: nowrap;
   }
+
+  .star-btn, .delete-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+  }
+  .star-btn {
+    font-size: 19px;
+    color: #d1d5db;
+  }
+  .star-btn.active { color: var(--star); }
+  .delete-btn {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .delete-btn:active { color: var(--danger); }
 
   #emptyMsg {
     text-align: center;
@@ -199,6 +308,15 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   .leaflet-popup-content { direction: rtl; font-size: 13px; }
+  html.dark-mode .leaflet-tile-pane {
+    filter: invert(1) hue-rotate(180deg) brightness(0.93) contrast(0.9);
+  }
+  html.dark-mode .leaflet-popup-content-wrapper,
+  html.dark-mode .leaflet-popup-tip {
+    background: var(--card-bg);
+    color: var(--text);
+  }
+  html.dark-mode .leaflet-container { background: #0f1417; }
 
   @media (min-width: 768px) {
     main { flex-direction: row; }
@@ -212,11 +330,25 @@
 <div id="app">
   <header>
     <h1>🚻 أقرب دورة مياه</h1>
-    <button id="refreshBtn">تحديث الموقع</button>
+    <div class="header-actions">
+      <button id="addBtn" class="icon-btn" title="إضافة مكان مفقود" aria-label="إضافة مكان مفقود">➕</button>
+      <button id="themeBtn" class="icon-btn" title="تبديل الوضع الليلي" aria-label="تبديل الوضع الليلي">🌙</button>
+      <button id="refreshBtn">تحديث الموقع</button>
+    </div>
   </header>
 
   <div id="status"></div>
-  <div id="hint">📍 إذا كان موقعك غير دقيق: اضغط على المكان الصحيح بالخريطة أو اسحب النقطة الزرقاء.</div>
+  <div id="hint"></div>
+
+  <div id="toolbar">
+    <input id="searchInput" type="search" placeholder="🔍 ابحث بالاسم..." autocomplete="off">
+    <div id="filterChips">
+      <button class="chip" data-filter="free">مجانية</button>
+      <button class="chip" data-filter="wheelchair">ذوي الاحتياجات</button>
+      <button class="chip" data-filter="favorites">⭐ المفضلة</button>
+      <button class="chip" data-filter="confirmedOnly">🚻 دورات مياه مؤكدة فقط</button>
+    </div>
+  </div>
 
   <main>
     <div id="map"></div>
@@ -244,20 +376,113 @@
     "https://overpass.kumi.systems/api/interpreter"
   ];
 
+  const LS_KEYS = {
+    theme: "tf_theme",
+    favorites: "tf_favorites",
+    customPlaces: "tf_custom_places"
+  };
+
   const statusEl = document.getElementById("status");
+  const hintEl = document.getElementById("hint");
   const refreshBtn = document.getElementById("refreshBtn");
+  const addBtn = document.getElementById("addBtn");
+  const themeBtn = document.getElementById("themeBtn");
+  const searchInput = document.getElementById("searchInput");
+  const filterChipsEl = document.getElementById("filterChips");
   const listEl = document.getElementById("list");
   const emptyMsg = document.getElementById("emptyMsg");
+  const mapEl = document.getElementById("map");
 
   let map, userMarker, userCircle;
   const toiletMarkers = new Map(); // id -> marker
 
+  let currentLat = null;
+  let currentLon = null;
+  let overpassPlaces = []; // من Overpass API
+  let customPlaces = loadJSON(LS_KEYS.customPlaces, []); // أضافها المستخدم يدويًا
+  let favorites = new Set(loadJSON(LS_KEYS.favorites, []));
+  let addMode = false;
+
+  const filters = { query: "", free: false, wheelchair: false, favorites: false, confirmedOnly: false };
+
+  const CATEGORY_LABELS = {
+    toilet: null,
+    mosque: "مسجد",
+    cafe: "مقهى",
+    restaurant: "مطعم",
+    fast_food: "وجبات سريعة"
+  };
+
+  // ---------- تخزين محلي ----------
+  function loadJSON(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
+  function saveJSON(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (e) {}
+  }
+
+  // ---------- الوضع الليلي ----------
+  function resolveInitialTheme() {
+    const stored = localStorage.getItem(LS_KEYS.theme);
+    if (stored === "light" || stored === "dark") return stored;
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  }
+
+  let currentTheme = resolveInitialTheme();
+
+  function applyTheme(theme) {
+    document.documentElement.classList.toggle("dark-mode", theme === "dark");
+    themeBtn.textContent = theme === "dark" ? "☀️" : "🌙";
+  }
+
+  themeBtn.addEventListener("click", () => {
+    currentTheme = currentTheme === "dark" ? "light" : "dark";
+    localStorage.setItem(LS_KEYS.theme, currentTheme);
+    applyTheme(currentTheme);
+  });
+
+  applyTheme(currentTheme);
+
+  // ---------- أيقونات الخريطة ----------
   const userIcon = L.divIcon({
     className: "",
     html: '<div style="width:18px;height:18px;border-radius:50%;background:#2563eb;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.5);"></div>',
     iconSize: [18, 18],
     iconAnchor: [9, 9]
   });
+
+  function makePlaceIcon(bgColor, emoji) {
+    return L.divIcon({
+      className: "",
+      html: `<div style="background:${bgColor};width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:13px;">${emoji}</span></div>`,
+      iconSize: [26, 26],
+      iconAnchor: [13, 26],
+      popupAnchor: [0, -26]
+    });
+  }
+
+  const CATEGORY_ICONS = {
+    toilet: makePlaceIcon("#0d9488", "🚻"),
+    mosque: makePlaceIcon("#7c3aed", "🕌"),
+    cafe: makePlaceIcon("#b45309", "☕"),
+    restaurant: makePlaceIcon("#db2777", "🍽️"),
+    fast_food: makePlaceIcon("#db2777", "🍽️")
+  };
+  const customIcon = makePlaceIcon("#ea580c", "🚻");
+
+  function iconForPlace(place) {
+    if (place.isCustom) return customIcon;
+    return CATEGORY_ICONS[place.category] || CATEGORY_ICONS.toilet;
+  }
 
   // ---------- تهيئة الخريطة ----------
   function initMap(lat, lon) {
@@ -268,9 +493,12 @@
       maxZoom: 19
     }).addTo(map);
 
-    // إذا موقع GPS/الشبكة غير دقيق، يقدر المستخدم يضغط على المكان الصحيح بالخريطة
     map.on("click", (e) => {
-      updateLocationManually(e.latlng.lat, e.latlng.lng);
+      if (addMode) {
+        handleAddPlaceClick(e.latlng.lat, e.latlng.lng);
+      } else {
+        updateLocationManually(e.latlng.lat, e.latlng.lng);
+      }
     });
   }
 
@@ -311,6 +539,60 @@
     setUserLocation(lat, lon, null);
     setStatus("تم تحديد الموقع يدويًا، جارِ البحث من هذا المكان...");
     fetchToilets(lat, lon);
+  }
+
+  // ---------- وضع إضافة مكان مفقود ----------
+  function setAddMode(on) {
+    addMode = on;
+    addBtn.classList.toggle("active", on);
+    mapEl.classList.toggle("add-mode-cursor", on);
+    updateHint();
+  }
+
+  addBtn.addEventListener("click", () => setAddMode(!addMode));
+
+  function handleAddPlaceClick(lat, lon) {
+    const name = window.prompt("اسم المكان (اختياري):", "دورة مياه");
+    if (name === null) {
+      setAddMode(false);
+      return;
+    }
+    const place = {
+      id: "custom/" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+      lat,
+      lon,
+      name: name.trim() || "دورة مياه (أضافها مستخدم)",
+      category: "toilet",
+      fee: null,
+      wheelchair: null,
+      openingHours: null
+    };
+    customPlaces.push(place);
+    saveJSON(LS_KEYS.customPlaces, customPlaces);
+    setAddMode(false);
+    setStatus("تمت إضافة المكان بنجاح.");
+    recomputeAndRender();
+  }
+
+  function removeCustomPlace(id) {
+    if (!window.confirm("حذف هذا المكان الذي أضفته؟")) return;
+    customPlaces = customPlaces.filter((p) => p.id !== id);
+    saveJSON(LS_KEYS.customPlaces, customPlaces);
+    recomputeAndRender();
+  }
+
+  function updateHint() {
+    hintEl.textContent = addMode
+      ? "🖊️ اضغط على أي مكان بالخريطة لإضافة دورة مياه مفقودة (سيُطلب منك اسم اختياري)."
+      : "📍 إذا كان موقعك غير دقيق: اضغط على المكان الصحيح بالخريطة أو اسحب النقطة الزرقاء.";
+  }
+  updateHint();
+
+  // ---------- المفضلة ----------
+  function toggleFavorite(id) {
+    if (favorites.has(id)) favorites.delete(id);
+    else favorites.add(id);
+    saveJSON(LS_KEYS.favorites, [...favorites]);
   }
 
   // ---------- حالة الواجهة ----------
@@ -387,14 +669,35 @@
 
   // ---------- الاستعلام من Overpass API ----------
   function buildQuery(lat, lon) {
+    const r = SEARCH_RADIUS;
+    const around = `around:${r},${lat},${lon}`;
     return `
       [out:json][timeout:25];
       (
-        node["amenity"="toilets"](around:${SEARCH_RADIUS},${lat},${lon});
-        way["amenity"="toilets"](around:${SEARCH_RADIUS},${lat},${lon});
+        node["amenity"="toilets"](${around});
+        way["amenity"="toilets"](${around});
+        node["amenity"="place_of_worship"]["religion"="muslim"](${around});
+        way["amenity"="place_of_worship"]["religion"="muslim"](${around});
+        node["amenity"="cafe"](${around});
+        way["amenity"="cafe"](${around});
+        node["amenity"="restaurant"](${around});
+        way["amenity"="restaurant"](${around});
+        node["amenity"="fast_food"](${around});
+        way["amenity"="fast_food"](${around});
       );
       out center tags;
     `;
+  }
+
+  function classifyElement(tags) {
+    switch (tags.amenity) {
+      case "toilets": return { category: "toilet", fallbackName: "دورة مياه عامة" };
+      case "place_of_worship": return { category: "mosque", fallbackName: "مسجد" };
+      case "cafe": return { category: "cafe", fallbackName: "مقهى" };
+      case "restaurant": return { category: "restaurant", fallbackName: "مطعم" };
+      case "fast_food": return { category: "fast_food", fallbackName: "مطعم وجبات سريعة" };
+      default: return { category: "toilet", fallbackName: "دورة مياه عامة" };
+    }
   }
 
   async function fetchFromEndpoint(url, query) {
@@ -408,6 +711,8 @@
   }
 
   async function fetchToilets(lat, lon) {
+    currentLat = lat;
+    currentLon = lon;
     setStatus("جارِ البحث عن دورات المياه القريبة...");
     const query = buildQuery(lat, lon);
 
@@ -431,49 +736,87 @@
       return;
     }
 
-    const places = (data.elements || [])
+    overpassPlaces = (data.elements || [])
       .map((el) => {
         const plat = el.type === "node" ? el.lat : el.center && el.center.lat;
         const plon = el.type === "node" ? el.lon : el.center && el.center.lon;
         if (plat == null || plon == null) return null;
 
         const tags = el.tags || {};
+        const { category, fallbackName } = classifyElement(tags);
         return {
           id: el.type + "/" + el.id,
           lat: plat,
           lon: plon,
-          name: tags.name || "دورة مياه عامة",
+          name: tags.name || fallbackName,
+          category,
           fee: tags.fee === "yes" ? "مدفوعة" : tags.fee === "no" ? "مجانية" : null,
           wheelchair: tags.wheelchair === "yes" ? "إمكانية وصول لذوي الاحتياجات" : null,
           openingHours: tags.opening_hours || null,
-          distance: distanceMeters(lat, lon, plat, plon)
+          isCustom: false
         };
       })
-      .filter(Boolean)
-      .sort((a, b) => a.distance - b.distance);
+      .filter(Boolean);
 
-    if (places.length === 0) {
+    const total = overpassPlaces.length + customPlaces.length;
+    if (total === 0) {
       setStatus(`لم يتم العثور على دورات مياه ضمن ${SEARCH_RADIUS} متر من موقعك.`, "error");
     } else {
-      setStatus(`تم العثور على ${places.length} دورة مياه قريبة.`);
+      setStatus(`تم العثور على ${total} دورة مياه قريبة.`);
     }
 
-    renderPlaces(places);
+    recomputeAndRender();
   }
+
+  // ---------- دمج البيانات + الفلاتر ----------
+  function getAllPlacesWithDistance() {
+    const all = [
+      ...overpassPlaces,
+      ...customPlaces.map((p) => ({ ...p, isCustom: true }))
+    ];
+    if (currentLat == null) return all;
+
+    return all
+      .map((p) => ({ ...p, distance: distanceMeters(currentLat, currentLon, p.lat, p.lon) }))
+      .sort((a, b) => a.distance - b.distance);
+  }
+
+  function applyFilters(places) {
+    const q = filters.query.trim().toLowerCase();
+    return places.filter((p) => {
+      if (filters.favorites && !favorites.has(p.id)) return false;
+      if (filters.confirmedOnly && p.category !== "toilet") return false;
+      if (filters.free && p.fee !== "مجانية") return false;
+      if (filters.wheelchair && !p.wheelchair) return false;
+      if (q && !p.name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }
+
+  function recomputeAndRender() {
+    const all = getAllPlacesWithDistance();
+    renderPlaces(applyFilters(all));
+  }
+
+  searchInput.addEventListener("input", () => {
+    filters.query = searchInput.value;
+    recomputeAndRender();
+  });
+
+  filterChipsEl.addEventListener("click", (e) => {
+    const chip = e.target.closest(".chip");
+    if (!chip) return;
+    const key = chip.dataset.filter;
+    filters[key] = !filters[key];
+    chip.classList.toggle("active", filters[key]);
+    recomputeAndRender();
+  });
 
   // ---------- عرض القائمة والخريطة ----------
   function clearToiletMarkers() {
     toiletMarkers.forEach((m) => map.removeLayer(m));
     toiletMarkers.clear();
   }
-
-  const toiletIcon = L.divIcon({
-    className: "",
-    html: '<div style="background:#0d9488;width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:13px;">🚻</span></div>',
-    iconSize: [26, 26],
-    iconAnchor: [13, 26],
-    popupAnchor: [0, -26]
-  });
 
   function renderPlaces(places) {
     clearToiletMarkers();
@@ -482,9 +825,13 @@
 
     places.forEach((place) => {
       // marker على الخريطة
-      const marker = L.marker([place.lat, place.lon], { icon: toiletIcon }).addTo(map);
+      const marker = L.marker([place.lat, place.lon], {
+        icon: iconForPlace(place)
+      }).addTo(map);
       marker.bindPopup(
-        `<b>${escapeHtml(place.name)}</b><br>${formatDistance(place.distance)} تقريبًا`
+        `<b>${escapeHtml(place.name)}</b><br>${
+          place.distance != null ? formatDistance(place.distance) + " تقريبًا" : ""
+        }`
       );
       toiletMarkers.set(place.id, marker);
 
@@ -493,19 +840,42 @@
       li.className = "place-card";
       li.dataset.id = place.id;
 
+      const categoryLabel = CATEGORY_LABELS[place.category];
       const tagsHtml = [
+        categoryLabel ? `<span class="tag warn">${categoryLabel} — قد يتوفر مرحاض للعملاء</span>` : "",
         place.fee ? `<span class="tag">${place.fee}</span>` : "",
         place.wheelchair ? `<span class="tag">${place.wheelchair}</span>` : "",
-        place.openingHours ? `<span class="tag">${escapeHtml(place.openingHours)}</span>` : ""
+        place.openingHours ? `<span class="tag">${escapeHtml(place.openingHours)}</span>` : "",
+        place.isCustom ? `<span class="tag">أضافها مستخدم</span>` : ""
       ].join("");
+
+      const isFav = favorites.has(place.id);
 
       li.innerHTML = `
         <div class="place-info">
           <div class="place-name">${escapeHtml(place.name)}</div>
           <div class="place-meta">${tagsHtml || "لا توجد تفاصيل إضافية"}</div>
         </div>
-        <div class="place-distance">${formatDistance(place.distance)}</div>
+        <div class="place-side">
+          <button class="star-btn${isFav ? " active" : ""}" aria-label="مفضلة">${isFav ? "★" : "☆"}</button>
+          <div class="place-distance">${place.distance != null ? formatDistance(place.distance) : "—"}</div>
+          ${place.isCustom ? '<button class="delete-btn" aria-label="حذف">🗑</button>' : ""}
+        </div>
       `;
+
+      li.querySelector(".star-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleFavorite(place.id);
+        recomputeAndRender();
+      });
+
+      const deleteBtn = li.querySelector(".delete-btn");
+      if (deleteBtn) {
+        deleteBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          removeCustomPlace(place.id);
+        });
+      }
 
       li.addEventListener("click", () => {
         document.querySelectorAll(".place-card").forEach((c) => c.classList.remove("active"));
