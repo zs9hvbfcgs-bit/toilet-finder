@@ -87,6 +87,15 @@
   #status.visible { display: block; }
   #status.error { color: var(--danger); }
 
+  #hint {
+    padding: 6px 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+    background: #f0fdfa;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
   main {
     flex: 1;
     display: flex;
@@ -207,6 +216,7 @@
   </header>
 
   <div id="status"></div>
+  <div id="hint">📍 إذا كان موقعك غير دقيق: اضغط على المكان الصحيح بالخريطة أو اسحب النقطة الزرقاء.</div>
 
   <main>
     <div id="map"></div>
@@ -242,6 +252,13 @@
   let map, userMarker, userCircle;
   const toiletMarkers = new Map(); // id -> marker
 
+  const userIcon = L.divIcon({
+    className: "",
+    html: '<div style="width:18px;height:18px;border-radius:50%;background:#2563eb;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.5);"></div>',
+    iconSize: [18, 18],
+    iconAnchor: [9, 9]
+  });
+
   // ---------- تهيئة الخريطة ----------
   function initMap(lat, lon) {
     map = L.map("map", { zoomControl: true }).setView([lat, lon], 16);
@@ -250,6 +267,11 @@
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19
     }).addTo(map);
+
+    // إذا موقع GPS/الشبكة غير دقيق، يقدر المستخدم يضغط على المكان الصحيح بالخريطة
+    map.on("click", (e) => {
+      updateLocationManually(e.latlng.lat, e.latlng.lng);
+    });
   }
 
   function setUserLocation(lat, lon, accuracy) {
@@ -261,15 +283,17 @@
 
     if (userMarker) {
       userMarker.setLatLng([lat, lon]);
-      userCircle.setLatLng([lat, lon]).setRadius(accuracy || 0);
+      if (accuracy) userCircle.setLatLng([lat, lon]).setRadius(accuracy).addTo(map);
+      else map.removeLayer(userCircle);
     } else {
-      userMarker = L.circleMarker([lat, lon], {
-        radius: 8,
-        color: "#fff",
-        weight: 2,
-        fillColor: "#2563eb",
-        fillOpacity: 1
-      }).addTo(map).bindPopup("موقعك الحالي");
+      userMarker = L.marker([lat, lon], { icon: userIcon, draggable: true })
+        .addTo(map)
+        .bindPopup("موقعك الحالي — اسحبني إذا كان الموقع غير دقيق");
+
+      userMarker.on("dragend", () => {
+        const p = userMarker.getLatLng();
+        updateLocationManually(p.lat, p.lng);
+      });
 
       userCircle = L.circle([lat, lon], {
         radius: accuracy || 0,
@@ -277,8 +301,16 @@
         fillColor: "#2563eb",
         fillOpacity: 0.08,
         weight: 1
-      }).addTo(map);
+      });
+      if (accuracy) userCircle.addTo(map);
     }
+  }
+
+  // تحديث الموقع يدويًا (بالسحب أو الضغط على الخريطة) وإعادة البحث من هناك
+  function updateLocationManually(lat, lon) {
+    setUserLocation(lat, lon, null);
+    setStatus("تم تحديد الموقع يدويًا، جارِ البحث من هذا المكان...");
+    fetchToilets(lat, lon);
   }
 
   // ---------- حالة الواجهة ----------
@@ -328,6 +360,14 @@
         const { latitude, longitude, accuracy } = pos.coords;
         setUserLocation(latitude, longitude, accuracy);
         fetchToilets(latitude, longitude);
+        if (accuracy && accuracy > 300) {
+          setTimeout(() => {
+            setStatus(
+              `دقة الموقع منخفضة (±${Math.round(accuracy)} م تقريبًا). اضغط على مكانك الصحيح بالخريطة أو اسحب النقطة الزرقاء لتصحيحه.`,
+              "error"
+            );
+          }, 1500);
+        }
       },
       (err) => {
         setLoading(false);
@@ -341,7 +381,7 @@
         }
         setStatus(msg, "error");
       },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   }
 
