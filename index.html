@@ -538,7 +538,37 @@
     return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${place.lat},${place.lon}&travelmode=${travelmode}`;
   }
 
-  function drawRouteTo(place) {
+  // كل وسيلة تنقل تتبع شبكة طرق مختلفة (سيارات، دراجات، ممرات مشاة)
+  const OSRM_BASE = "https://router.project-osrm.org/route/v1";
+  const OSRM_PROFILES = { walk: "foot", bike: "cycling", car: "driving" };
+  const ROUTE_COLORS = { walk: "#0d9488", bike: "#7c3aed", car: "#2563eb" };
+
+  function formatSeconds(sec) {
+    const mins = Math.round(sec / 60);
+    if (mins < 1) return "أقل من دقيقة";
+    if (mins < 60) return mins + " د";
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return h + " س" + (m ? " " + m + " د" : "");
+  }
+
+  async function fetchRoadRoute(fromLat, fromLon, toLat, toLon, profile) {
+    const url = `${OSRM_BASE}/${profile}/${fromLon},${fromLat};${toLon},${toLat}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("OSRM HTTP " + res.status);
+    const data = await res.json();
+    if (data.code !== "Ok" || !data.routes || !data.routes.length) throw new Error("OSRM: لا يوجد مسار");
+    const route = data.routes[0];
+    return {
+      latlngs: route.geometry.coordinates.map(([lon, lat]) => [lat, lon]),
+      distance: route.distance,
+      duration: route.duration
+    };
+  }
+
+  let routeRequestToken = 0;
+
+  async function drawRouteTo(place) {
     if (routeLine) {
       map.removeLayer(routeLine);
       routeLine = null;
@@ -547,11 +577,31 @@
       map.setView([place.lat, place.lon], 18, { animate: true });
       return;
     }
+
+    const myToken = ++routeRequestToken;
+    const origin = { lat: currentLat, lon: currentLon };
+    const color = ROUTE_COLORS[currentMode] || ROUTE_COLORS.walk;
+
+    // خط مستقيم مؤقت ريثما يوصل المسار الفعلي على الطرق
     routeLine = L.polyline(
-      [[currentLat, currentLon], [place.lat, place.lon]],
-      { color: "#0d9488", weight: 3, dashArray: "6 10", opacity: 0.85 }
+      [[origin.lat, origin.lon], [place.lat, place.lon]],
+      { color, weight: 3, dashArray: "6 10", opacity: 0.7 }
     ).addTo(map);
     map.fitBounds(routeLine.getBounds(), { padding: [50, 50], maxZoom: 17 });
+
+    const profile = OSRM_PROFILES[currentMode] || "foot";
+    try {
+      const route = await fetchRoadRoute(origin.lat, origin.lon, place.lat, place.lon, profile);
+      if (myToken !== routeRequestToken) return; // المستخدم اختار مكانًا آخر بالأثناء
+
+      map.removeLayer(routeLine);
+      routeLine = L.polyline(route.latlngs, { color, weight: 5, opacity: 0.85 }).addTo(map);
+      routeLine.bindPopup(`🧭 ${formatDistance(route.distance)} · ${formatSeconds(route.duration)} على الطريق`);
+      map.fitBounds(routeLine.getBounds(), { padding: [50, 50], maxZoom: 17 });
+    } catch (e) {
+      if (myToken !== routeRequestToken) return;
+      routeLine.bindPopup("⚠️ تعذّر جلب مسار فعلي على الطرق، هذا خط تقريبي مباشر.");
+    }
   }
 
   // ---------- أيقونات الخريطة ----------
