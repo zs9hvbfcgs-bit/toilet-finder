@@ -441,9 +441,14 @@
   let currentLon = null;
   let lastFetchLat = null;
   let lastFetchLon = null;
+  let lastFetchAt = 0;
   let liveTracking = false;
   let watchId = null;
-  const LIVE_REFETCH_THRESHOLD = 300; // م — أعد البحث لو تحرك المستخدم أكثر من هالمسافة
+  let fetchInFlight = false;
+  // مسافة إعادة البحث تتناسب مع سرعة وسيلة التنقل، وبحد أدنى 20 ثانية بين كل طلب
+  // عشان ما نثقل على خادم Overpass المجاني (خصوصًا بوضع السيارة/الدراجة)
+  const LIVE_REFETCH_DISTANCE = { walk: 300, bike: 800, car: 2000 };
+  const LIVE_REFETCH_MIN_INTERVAL_MS = 20000;
   let overpassPlaces = []; // من Overpass API
   let customPlaces = loadJSON(LS_KEYS.customPlaces, []); // أضافها المستخدم يدويًا
   let favorites = new Set(loadJSON(LS_KEYS.favorites, []));
@@ -739,10 +744,12 @@
         if (typeof heading === "number" && !isNaN(heading)) setUserHeading(heading);
         recomputeAndRender();
 
+        const distanceThreshold = LIVE_REFETCH_DISTANCE[currentMode] || LIVE_REFETCH_DISTANCE.walk;
         const movedFar =
           lastFetchLat == null ||
-          distanceMeters(lastFetchLat, lastFetchLon, latitude, longitude) > LIVE_REFETCH_THRESHOLD;
-        if (movedFar) fetchToilets(latitude, longitude);
+          distanceMeters(lastFetchLat, lastFetchLon, latitude, longitude) > distanceThreshold;
+        const enoughTimePassed = Date.now() - lastFetchAt > LIVE_REFETCH_MIN_INTERVAL_MS;
+        if (movedFar && enoughTimePassed && !fetchInFlight) fetchToilets(latitude, longitude);
       },
       (err) => {
         setStatus("تعذّر متابعة موقعك مباشرة: " + err.message, "error");
@@ -909,22 +916,28 @@
   }
 
   // ---------- الاستعلام من Overpass API ----------
+  // نطاق الأماكن "المحتملة" (مساجد/مقاهي/مطاعم) يبقى صغير دائمًا مهما كانت وسيلة التنقل،
+  // عشان الاستعلام ما يصير ثقيل وبطيء بوضع السيارة/الدراجة (نطاق كبير)
+  const LIKELY_PLACES_RADIUS_CAP = 2000;
+
   function buildQuery(lat, lon) {
-    const r = MODES[currentMode].radius;
-    const around = `around:${r},${lat},${lon}`;
+    const toiletRadius = MODES[currentMode].radius;
+    const likelyRadius = Math.min(toiletRadius, LIKELY_PLACES_RADIUS_CAP);
+    const aroundToilets = `around:${toiletRadius},${lat},${lon}`;
+    const aroundLikely = `around:${likelyRadius},${lat},${lon}`;
     return `
-      [out:json][timeout:25];
+      [out:json][timeout:20];
       (
-        node["amenity"="toilets"](${around});
-        way["amenity"="toilets"](${around});
-        node["amenity"="place_of_worship"]["religion"="muslim"](${around});
-        way["amenity"="place_of_worship"]["religion"="muslim"](${around});
-        node["amenity"="cafe"](${around});
-        way["amenity"="cafe"](${around});
-        node["amenity"="restaurant"](${around});
-        way["amenity"="restaurant"](${around});
-        node["amenity"="fast_food"](${around});
-        way["amenity"="fast_food"](${around});
+        node["amenity"="toilets"](${aroundToilets});
+        way["amenity"="toilets"](${aroundToilets});
+        node["amenity"="place_of_worship"]["religion"="muslim"](${aroundLikely});
+        way["amenity"="place_of_worship"]["religion"="muslim"](${aroundLikely});
+        node["amenity"="cafe"](${aroundLikely});
+        way["amenity"="cafe"](${aroundLikely});
+        node["amenity"="restaurant"](${aroundLikely});
+        way["amenity"="restaurant"](${aroundLikely});
+        node["amenity"="fast_food"](${aroundLikely});
+        way["amenity"="fast_food"](${aroundLikely});
       );
       out center tags;
     `;
@@ -942,20 +955,31 @@
   }
 
   async function fetchFromEndpoint(url, query) {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain" },
-      body: query
-    });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    return res.json();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: query,
+        signal: controller.signal
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return await res.json();
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   async function fetchToilets(lat, lon) {
+    if (fetchInFlight) return; // تفادي تراكم طلبات متزامنة أثناء التتبع المباشر
+    fetchInFlight = true;
+
     currentLat = lat;
     currentLon = lon;
     lastFetchLat = lat;
     lastFetchLon = lon;
+    lastFetchAt = Date.now();
     if (routeLine) {
       map.removeLayer(routeLine);
       routeLine = null;
@@ -963,56 +987,60 @@
     setStatus("جارِ البحث عن دورات المياه القريبة...");
     const query = buildQuery(lat, lon);
 
-    let data = null;
-    let lastError = null;
+    try {
+      let data = null;
+      let lastError = null;
 
-    for (const endpoint of OVERPASS_ENDPOINTS) {
-      try {
-        data = await fetchFromEndpoint(endpoint, query);
-        break;
-      } catch (e) {
-        lastError = e;
+      for (const endpoint of OVERPASS_ENDPOINTS) {
+        try {
+          data = await fetchFromEndpoint(endpoint, query);
+          break;
+        } catch (e) {
+          lastError = e;
+        }
       }
+
+      setLoading(false);
+
+      if (!data) {
+        setStatus("فشل الاتصال بخادم البيانات (Overpass API). حاول مجددًا لاحقًا.", "error");
+        console.error(lastError);
+        return;
+      }
+
+      overpassPlaces = (data.elements || [])
+        .map((el) => {
+          const plat = el.type === "node" ? el.lat : el.center && el.center.lat;
+          const plon = el.type === "node" ? el.lon : el.center && el.center.lon;
+          if (plat == null || plon == null) return null;
+
+          const tags = el.tags || {};
+          const { category, fallbackName } = classifyElement(tags);
+          return {
+            id: el.type + "/" + el.id,
+            lat: plat,
+            lon: plon,
+            name: tags.name || fallbackName,
+            category,
+            fee: tags.fee === "yes" ? "مدفوعة" : tags.fee === "no" ? "مجانية" : null,
+            wheelchair: tags.wheelchair === "yes" ? "إمكانية وصول لذوي الاحتياجات" : null,
+            openingHours: tags.opening_hours || null,
+            isCustom: false
+          };
+        })
+        .filter(Boolean);
+
+      const total = overpassPlaces.length + customPlaces.length;
+      if (total === 0) {
+        setStatus(`لم يتم العثور على دورات مياه ضمن ${formatDistance(MODES[currentMode].radius)} من موقعك.`, "error");
+      } else {
+        setStatus(`تم العثور على ${total} دورة مياه قريبة.`);
+      }
+
+      recomputeAndRender();
+    } finally {
+      fetchInFlight = false;
     }
-
-    setLoading(false);
-
-    if (!data) {
-      setStatus("فشل الاتصال بخادم البيانات (Overpass API). حاول مجددًا لاحقًا.", "error");
-      console.error(lastError);
-      return;
-    }
-
-    overpassPlaces = (data.elements || [])
-      .map((el) => {
-        const plat = el.type === "node" ? el.lat : el.center && el.center.lat;
-        const plon = el.type === "node" ? el.lon : el.center && el.center.lon;
-        if (plat == null || plon == null) return null;
-
-        const tags = el.tags || {};
-        const { category, fallbackName } = classifyElement(tags);
-        return {
-          id: el.type + "/" + el.id,
-          lat: plat,
-          lon: plon,
-          name: tags.name || fallbackName,
-          category,
-          fee: tags.fee === "yes" ? "مدفوعة" : tags.fee === "no" ? "مجانية" : null,
-          wheelchair: tags.wheelchair === "yes" ? "إمكانية وصول لذوي الاحتياجات" : null,
-          openingHours: tags.opening_hours || null,
-          isCustom: false
-        };
-      })
-      .filter(Boolean);
-
-    const total = overpassPlaces.length + customPlaces.length;
-    if (total === 0) {
-      setStatus(`لم يتم العثور على دورات مياه ضمن ${formatDistance(MODES[currentMode].radius)} من موقعك.`, "error");
-    } else {
-      setStatus(`تم العثور على ${total} دورة مياه قريبة.`);
-    }
-
-    recomputeAndRender();
   }
 
   // ---------- دمج البيانات + الفلاتر ----------
