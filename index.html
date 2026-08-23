@@ -292,7 +292,7 @@
     white-space: nowrap;
   }
 
-  .star-btn, .delete-btn {
+  .star-btn, .delete-btn, .dir-btn {
     background: none;
     border: none;
     cursor: pointer;
@@ -304,6 +304,10 @@
     color: #d1d5db;
   }
   .star-btn.active { color: var(--star); }
+  .dir-btn {
+    font-size: 16px;
+  }
+  .dir-btn:active { opacity: 0.6; }
   .delete-btn {
     font-size: 13px;
     color: var(--text-muted);
@@ -428,7 +432,7 @@
   const emptyMsg = document.getElementById("emptyMsg");
   const mapEl = document.getElementById("map");
 
-  let map, userMarker, userCircle;
+  let map, userMarker, userCircle, routeLine;
   const toiletMarkers = new Map(); // id -> marker
 
   let currentLat = null;
@@ -518,6 +522,29 @@
     const h = Math.floor(mins / 60);
     const m = mins % 60;
     return h + " س" + (m ? " " + m + " د" : "");
+  }
+
+  // ---------- المسار والاتجاهات ----------
+  function getDirectionsUrl(place) {
+    const travelmode = currentMode === "car" ? "driving" : currentMode === "bike" ? "bicycling" : "walking";
+    const origin = currentLat != null ? `${currentLat},${currentLon}` : "";
+    return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${place.lat},${place.lon}&travelmode=${travelmode}`;
+  }
+
+  function drawRouteTo(place) {
+    if (routeLine) {
+      map.removeLayer(routeLine);
+      routeLine = null;
+    }
+    if (currentLat == null) {
+      map.setView([place.lat, place.lon], 18, { animate: true });
+      return;
+    }
+    routeLine = L.polyline(
+      [[currentLat, currentLon], [place.lat, place.lon]],
+      { color: "#0d9488", weight: 3, dashArray: "6 10", opacity: 0.85 }
+    ).addTo(map);
+    map.fitBounds(routeLine.getBounds(), { padding: [50, 50], maxZoom: 17 });
   }
 
   // ---------- أيقونات الخريطة ----------
@@ -781,6 +808,10 @@
   async function fetchToilets(lat, lon) {
     currentLat = lat;
     currentLon = lon;
+    if (routeLine) {
+      map.removeLayer(routeLine);
+      routeLine = null;
+    }
     setStatus("جارِ البحث عن دورات المياه القريبة...");
     const query = buildQuery(lat, lon);
 
@@ -900,10 +931,16 @@
       marker.bindPopup(
         `<b>${escapeHtml(place.name)}</b><br>${
           place.distance != null
-            ? formatDistance(place.distance) + " · " + formatDuration(place.distance, speedKmh) + " تقريبًا"
+            ? formatDistance(place.distance) + " · " + formatDuration(place.distance, speedKmh) + " تقريبًا<br>"
             : ""
-        }`
+        }<a href="${getDirectionsUrl(place)}" target="_blank" rel="noopener" style="color:#0d9488;font-weight:600;">🧭 الاتجاهات</a>`
       );
+      marker.on("click", () => {
+        document.querySelectorAll(".place-card").forEach((c) => c.classList.remove("active"));
+        const li = listEl.querySelector(`[data-id="${CSS.escape(place.id)}"]`);
+        if (li) li.classList.add("active");
+        drawRouteTo(place);
+      });
       toiletMarkers.set(place.id, marker);
 
       // بطاقة في القائمة
@@ -929,6 +966,7 @@
         </div>
         <div class="place-side">
           <button class="star-btn${isFav ? " active" : ""}" aria-label="مفضلة">${isFav ? "★" : "☆"}</button>
+          <button class="dir-btn" aria-label="الاتجاهات" title="اتجاهات">🧭</button>
           <div class="place-distance">${
             place.distance != null
               ? formatDistance(place.distance) + '<br><span style="font-weight:400;font-size:11px;">' + formatDuration(place.distance, speedKmh) + "</span>"
@@ -944,6 +982,11 @@
         recomputeAndRender();
       });
 
+      li.querySelector(".dir-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        window.open(getDirectionsUrl(place), "_blank", "noopener");
+      });
+
       const deleteBtn = li.querySelector(".delete-btn");
       if (deleteBtn) {
         deleteBtn.addEventListener("click", (e) => {
@@ -955,7 +998,7 @@
       li.addEventListener("click", () => {
         document.querySelectorAll(".place-card").forEach((c) => c.classList.remove("active"));
         li.classList.add("active");
-        map.setView([place.lat, place.lon], 18, { animate: true });
+        drawRouteTo(place);
         marker.openPopup();
       });
 
