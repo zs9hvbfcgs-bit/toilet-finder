@@ -360,6 +360,7 @@
     <h1>🚻 أقرب دورة مياه</h1>
     <div class="header-actions">
       <button id="addBtn" class="icon-btn" title="إضافة مكان مفقود" aria-label="إضافة مكان مفقود">➕</button>
+      <button id="trackBtn" class="icon-btn" title="تتبع مباشر (GPS)" aria-label="تتبع مباشر">🛰️</button>
       <button id="themeBtn" class="icon-btn" title="تبديل الوضع الليلي" aria-label="تبديل الوضع الليلي">🌙</button>
       <button id="refreshBtn">تحديث الموقع</button>
     </div>
@@ -424,6 +425,7 @@
   const hintEl = document.getElementById("hint");
   const refreshBtn = document.getElementById("refreshBtn");
   const addBtn = document.getElementById("addBtn");
+  const trackBtn = document.getElementById("trackBtn");
   const themeBtn = document.getElementById("themeBtn");
   const searchInput = document.getElementById("searchInput");
   const filterChipsEl = document.getElementById("filterChips");
@@ -437,6 +439,11 @@
 
   let currentLat = null;
   let currentLon = null;
+  let lastFetchLat = null;
+  let lastFetchLon = null;
+  let liveTracking = false;
+  let watchId = null;
+  const LIVE_REFETCH_THRESHOLD = 300; // م — أعد البحث لو تحرك المستخدم أكثر من هالمسافة
   let overpassPlaces = []; // من Overpass API
   let customPlaces = loadJSON(LS_KEYS.customPlaces, []); // أضافها المستخدم يدويًا
   let favorites = new Set(loadJSON(LS_KEYS.favorites, []));
@@ -550,10 +557,25 @@
   // ---------- أيقونات الخريطة ----------
   const userIcon = L.divIcon({
     className: "",
-    html: '<div style="width:18px;height:18px;border-radius:50%;background:#2563eb;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.5);"></div>',
-    iconSize: [18, 18],
-    iconAnchor: [9, 9]
+    html:
+      '<div class="heading-wrap" style="width:32px;height:32px;position:relative;">' +
+      '<div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:0;height:0;' +
+      'border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #2563eb;"></div>' +
+      '<div style="position:absolute;top:9px;left:9px;width:14px;height:14px;border-radius:50%;' +
+      'background:#2563eb;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.5);"></div>' +
+      "</div>",
+    iconSize: [32, 32],
+    iconAnchor: [16, 16]
   });
+
+  // يدوّر سهم الاتجاه فوق نقطة المستخدم حسب البوصلة/اتجاه الحركة
+  function setUserHeading(deg) {
+    if (!userMarker) return;
+    const el = userMarker.getElement();
+    if (!el) return;
+    const wrap = el.querySelector(".heading-wrap");
+    if (wrap) wrap.style.transform = `rotate(${deg}deg)`;
+  }
 
   function makePlaceIcon(bgColor, emoji) {
     return L.divIcon({
@@ -631,10 +653,84 @@
 
   // تحديث الموقع يدويًا (بالسحب أو الضغط على الخريطة) وإعادة البحث من هناك
   function updateLocationManually(lat, lon) {
+    if (liveTracking) stopLiveTracking(); // ما نخلي GPS يلغي التصحيح اليدوي فورًا
     setUserLocation(lat, lon, null);
     setStatus("تم تحديد الموقع يدويًا، جارِ البحث من هذا المكان...");
     fetchToilets(lat, lon);
   }
+
+  // ---------- التتبع المباشر (GPS) ----------
+  function handleOrientation(e) {
+    let heading = null;
+    if (typeof e.webkitCompassHeading === "number") {
+      heading = e.webkitCompassHeading; // iOS
+    } else if (typeof e.alpha === "number") {
+      heading = 360 - e.alpha; // تقريبي على أندرويد
+    }
+    if (heading != null && !isNaN(heading)) setUserHeading(heading);
+  }
+
+  async function startLiveTracking() {
+    if (!navigator.geolocation) {
+      setStatus("المتصفح لا يدعم تحديد الموقع (Geolocation).", "error");
+      return;
+    }
+
+    liveTracking = true;
+    trackBtn.classList.add("active");
+    setStatus("تم تفعيل التتبع المباشر، الموقع يتحدّث تلقائيًا أثناء تحركك.");
+
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy, heading } = pos.coords;
+        currentLat = latitude;
+        currentLon = longitude;
+        setUserLocation(latitude, longitude, accuracy);
+        if (typeof heading === "number" && !isNaN(heading)) setUserHeading(heading);
+        recomputeAndRender();
+
+        const movedFar =
+          lastFetchLat == null ||
+          distanceMeters(lastFetchLat, lastFetchLon, latitude, longitude) > LIVE_REFETCH_THRESHOLD;
+        if (movedFar) fetchToilets(latitude, longitude);
+      },
+      (err) => {
+        setStatus("تعذّر متابعة موقعك مباشرة: " + err.message, "error");
+        stopLiveTracking();
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+    );
+
+    if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+      try {
+        const res = await DeviceOrientationEvent.requestPermission();
+        if (res === "granted") window.addEventListener("deviceorientation", handleOrientation);
+      } catch (e) {}
+    } else if (typeof DeviceOrientationEvent !== "undefined") {
+      window.addEventListener("deviceorientationabsolute", handleOrientation);
+      window.addEventListener("deviceorientation", handleOrientation);
+    }
+  }
+
+  function stopLiveTracking() {
+    liveTracking = false;
+    trackBtn.classList.remove("active");
+    if (watchId != null) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+    window.removeEventListener("deviceorientation", handleOrientation);
+    window.removeEventListener("deviceorientationabsolute", handleOrientation);
+  }
+
+  trackBtn.addEventListener("click", () => {
+    if (liveTracking) {
+      stopLiveTracking();
+      setStatus("تم إيقاف التتبع المباشر.");
+    } else {
+      startLiveTracking();
+    }
+  });
 
   // ---------- وضع إضافة مكان مفقود ----------
   function setAddMode(on) {
@@ -808,6 +904,8 @@
   async function fetchToilets(lat, lon) {
     currentLat = lat;
     currentLon = lon;
+    lastFetchLat = lat;
+    lastFetchLon = lon;
     if (routeLine) {
       map.removeLayer(routeLine);
       routeLine = null;
