@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>أقرب دورة مياه</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+  crossorigin=""/>
+
+<style>
+  :root{
+    --bg: #f4f6f8;
+    --card-bg: #ffffff;
+    --text: #1b1f23;
+    --text-muted: #6b7280;
+    --primary: #0d9488;
+    --primary-dark: #0f766e;
+    --border: #e5e7eb;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+    --danger: #dc2626;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  header {
+    background: var(--primary);
+    color: #fff;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-shrink: 0;
+    box-shadow: var(--shadow);
+    z-index: 10;
+  }
+
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  #refreshBtn {
+    background: rgba(255,255,255,0.15);
+    border: none;
+    color: #fff;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  #refreshBtn:active { background: rgba(255,255,255,0.3); }
+  #refreshBtn:disabled { opacity: 0.6; cursor: default; }
+
+  #status {
+    padding: 10px 16px;
+    font-size: 13px;
+    color: var(--text-muted);
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    display: none;
+  }
+  #status.visible { display: block; }
+  #status.error { color: var(--danger); }
+
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  #map {
+    flex: 1 1 45%;
+    min-height: 220px;
+    width: 100%;
+  }
+
+  #listWrap {
+    flex: 1 1 55%;
+    overflow-y: auto;
+    background: var(--bg);
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #list {
+    list-style: none;
+    margin: 0;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .place-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    box-shadow: var(--shadow);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    transition: background 0.15s;
+  }
+  .place-card:active { background: #f0fdfa; }
+  .place-card.active { border-color: var(--primary); background: #f0fdfa; }
+
+  .place-info { min-width: 0; }
+  .place-name {
+    font-weight: 600;
+    font-size: 15px;
+    margin-bottom: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .place-meta {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .tag {
+    background: #ecfdf5;
+    color: var(--primary-dark);
+    padding: 1px 7px;
+    border-radius: 6px;
+    font-size: 11.5px;
+  }
+
+  .place-distance {
+    flex-shrink: 0;
+    text-align: center;
+    background: var(--primary);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  #emptyMsg {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 40px 20px;
+    font-size: 14px;
+    display: none;
+  }
+  #emptyMsg.visible { display: block; }
+
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .leaflet-popup-content { direction: rtl; font-size: 13px; }
+
+  @media (min-width: 768px) {
+    main { flex-direction: row; }
+    #map { flex: 1 1 60%; min-height: 0; }
+    #listWrap { flex: 1 1 40%; max-width: 420px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header>
+    <h1>🚻 أقرب دورة مياه</h1>
+    <button id="refreshBtn">تحديث الموقع</button>
+  </header>
+
+  <div id="status"></div>
+
+  <main>
+    <div id="map"></div>
+    <div id="listWrap">
+      <ul id="list"></ul>
+      <div id="emptyMsg">لا توجد نتائج بعد. اضغط "تحديث الموقع" للبحث.</div>
+    </div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+  crossorigin=""></script>
+
+<script>
+(function () {
+  "use strict";
+
+  // نطاق البحث بالمتر حول موقع المستخدم
+  const SEARCH_RADIUS = 1500;
+
+  // عدة مرايا لـ Overpass API لتفادي فشل خادم واحد
+  const OVERPASS_ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter"
+  ];
+
+  const statusEl = document.getElementById("status");
+  const refreshBtn = document.getElementById("refreshBtn");
+  const listEl = document.getElementById("list");
+  const emptyMsg = document.getElementById("emptyMsg");
+
+  let map, userMarker, userCircle;
+  const toiletMarkers = new Map(); // id -> marker
+
+  // ---------- تهيئة الخريطة ----------
+  function initMap(lat, lon) {
+    map = L.map("map", { zoomControl: true }).setView([lat, lon], 16);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19
+    }).addTo(map);
+  }
+
+  function setUserLocation(lat, lon, accuracy) {
+    if (!map) {
+      initMap(lat, lon);
+    } else {
+      map.setView([lat, lon], map.getZoom());
+    }
+
+    if (userMarker) {
+      userMarker.setLatLng([lat, lon]);
+      userCircle.setLatLng([lat, lon]).setRadius(accuracy || 0);
+    } else {
+      userMarker = L.circleMarker([lat, lon], {
+        radius: 8,
+        color: "#fff",
+        weight: 2,
+        fillColor: "#2563eb",
+        fillOpacity: 1
+      }).addTo(map).bindPopup("موقعك الحالي");
+
+      userCircle = L.circle([lat, lon], {
+        radius: accuracy || 0,
+        color: "#2563eb",
+        fillColor: "#2563eb",
+        fillOpacity: 0.08,
+        weight: 1
+      }).addTo(map);
+    }
+  }
+
+  // ---------- حالة الواجهة ----------
+  function setStatus(msg, type) {
+    statusEl.textContent = msg;
+    statusEl.className = "visible" + (type === "error" ? " error" : "");
+    if (!msg) statusEl.classList.remove("visible");
+  }
+
+  function setLoading(isLoading) {
+    refreshBtn.disabled = isLoading;
+    refreshBtn.innerHTML = isLoading
+      ? '<span class="spinner"></span> جارِ البحث...'
+      : "تحديث الموقع";
+  }
+
+  // ---------- حساب المسافة (Haversine) ----------
+  function distanceMeters(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const toRad = (d) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  function formatDistance(m) {
+    if (m < 1000) return Math.round(m) + " م";
+    return (m / 1000).toFixed(1) + " كم";
+  }
+
+  // ---------- طلب الموقع ----------
+  function requestLocation() {
+    if (!navigator.geolocation) {
+      setStatus("المتصفح لا يدعم تحديد الموقع (Geolocation).", "error");
+      return;
+    }
+
+    setLoading(true);
+    setStatus("جارِ تحديد موقعك...");
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        setUserLocation(latitude, longitude, accuracy);
+        fetchToilets(latitude, longitude);
+      },
+      (err) => {
+        setLoading(false);
+        let msg = "تعذّر تحديد موقعك.";
+        if (err.code === err.PERMISSION_DENIED) {
+          msg = "تم رفض إذن الوصول للموقع. فعّله من إعدادات المتصفح للمتابعة.";
+        } else if (err.code === err.POSITION_UNAVAILABLE) {
+          msg = "موقعك غير متاح حاليًا.";
+        } else if (err.code === err.TIMEOUT) {
+          msg = "انتهت مهلة تحديد الموقع، حاول مجددًا.";
+        }
+        setStatus(msg, "error");
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
+    );
+  }
+
+  // ---------- الاستعلام من Overpass API ----------
+  function buildQuery(lat, lon) {
+    return `
+      [out:json][timeout:25];
+      (
+        node["amenity"="toilets"](around:${SEARCH_RADIUS},${lat},${lon});
+        way["amenity"="toilets"](around:${SEARCH_RADIUS},${lat},${lon});
+      );
+      out center tags;
+    `;
+  }
+
+  async function fetchFromEndpoint(url, query) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: query
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.json();
+  }
+
+  async function fetchToilets(lat, lon) {
+    setStatus("جارِ البحث عن دورات المياه القريبة...");
+    const query = buildQuery(lat, lon);
+
+    let data = null;
+    let lastError = null;
+
+    for (const endpoint of OVERPASS_ENDPOINTS) {
+      try {
+        data = await fetchFromEndpoint(endpoint, query);
+        break;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+
+    setLoading(false);
+
+    if (!data) {
+      setStatus("فشل الاتصال بخادم البيانات (Overpass API). حاول مجددًا لاحقًا.", "error");
+      console.error(lastError);
+      return;
+    }
+
+    const places = (data.elements || [])
+      .map((el) => {
+        const plat = el.type === "node" ? el.lat : el.center && el.center.lat;
+        const plon = el.type === "node" ? el.lon : el.center && el.center.lon;
+        if (plat == null || plon == null) return null;
+
+        const tags = el.tags || {};
+        return {
+          id: el.type + "/" + el.id,
+          lat: plat,
+          lon: plon,
+          name: tags.name || "دورة مياه عامة",
+          fee: tags.fee === "yes" ? "مدفوعة" : tags.fee === "no" ? "مجانية" : null,
+          wheelchair: tags.wheelchair === "yes" ? "إمكانية وصول لذوي الاحتياجات" : null,
+          openingHours: tags.opening_hours || null,
+          distance: distanceMeters(lat, lon, plat, plon)
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.distance - b.distance);
+
+    if (places.length === 0) {
+      setStatus(`لم يتم العثور على دورات مياه ضمن ${SEARCH_RADIUS} متر من موقعك.`, "error");
+    } else {
+      setStatus(`تم العثور على ${places.length} دورة مياه قريبة.`);
+    }
+
+    renderPlaces(places);
+  }
+
+  // ---------- عرض القائمة والخريطة ----------
+  function clearToiletMarkers() {
+    toiletMarkers.forEach((m) => map.removeLayer(m));
+    toiletMarkers.clear();
+  }
+
+  const toiletIcon = L.divIcon({
+    className: "",
+    html: '<div style="background:#0d9488;width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:13px;">🚻</span></div>',
+    iconSize: [26, 26],
+    iconAnchor: [13, 26],
+    popupAnchor: [0, -26]
+  });
+
+  function renderPlaces(places) {
+    clearToiletMarkers();
+    listEl.innerHTML = "";
+    emptyMsg.classList.toggle("visible", places.length === 0);
+
+    places.forEach((place) => {
+      // marker على الخريطة
+      const marker = L.marker([place.lat, place.lon], { icon: toiletIcon }).addTo(map);
+      marker.bindPopup(
+        `<b>${escapeHtml(place.name)}</b><br>${formatDistance(place.distance)} تقريبًا`
+      );
+      toiletMarkers.set(place.id, marker);
+
+      // بطاقة في القائمة
+      const li = document.createElement("li");
+      li.className = "place-card";
+      li.dataset.id = place.id;
+
+      const tagsHtml = [
+        place.fee ? `<span class="tag">${place.fee}</span>` : "",
+        place.wheelchair ? `<span class="tag">${place.wheelchair}</span>` : "",
+        place.openingHours ? `<span class="tag">${escapeHtml(place.openingHours)}</span>` : ""
+      ].join("");
+
+      li.innerHTML = `
+        <div class="place-info">
+          <div class="place-name">${escapeHtml(place.name)}</div>
+          <div class="place-meta">${tagsHtml || "لا توجد تفاصيل إضافية"}</div>
+        </div>
+        <div class="place-distance">${formatDistance(place.distance)}</div>
+      `;
+
+      li.addEventListener("click", () => {
+        document.querySelectorAll(".place-card").forEach((c) => c.classList.remove("active"));
+        li.classList.add("active");
+        map.setView([place.lat, place.lon], 18, { animate: true });
+        marker.openPopup();
+      });
+
+      listEl.appendChild(li);
+    });
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // ---------- بدء التشغيل ----------
+  refreshBtn.addEventListener("click", requestLocation);
+  requestLocation();
+})();
+</script>
+
+</body>
+</html>
