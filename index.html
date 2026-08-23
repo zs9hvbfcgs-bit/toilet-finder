@@ -449,6 +449,8 @@
   // عشان ما نثقل على خادم Overpass المجاني (خصوصًا بوضع السيارة/الدراجة)
   const LIVE_REFETCH_DISTANCE = { walk: 300, bike: 800, car: 2000 };
   const LIVE_REFETCH_MIN_INTERVAL_MS = 20000;
+  let lastLiveRenderAt = 0;
+  const LIVE_RENDER_MIN_INTERVAL_MS = 4000; // ما نعيد بناء القائمة كل نبضة GPS، كل 4 ثواني كفاية
   let overpassPlaces = []; // من Overpass API
   let customPlaces = loadJSON(LS_KEYS.customPlaces, []); // أضافها المستخدم يدويًا
   let favorites = new Set(loadJSON(LS_KEYS.favorites, []));
@@ -675,9 +677,12 @@
   }
 
   function setUserLocation(lat, lon, accuracy) {
+    const isFirstFix = !userMarker;
     if (!map) {
       initMap(lat, lon);
-    } else {
+    } else if (isFirstFix) {
+      // نتوسّط تلقائيًا بأول تحديد موقع بس، بعد كذا نسيب المستخدم يتحكم بالخريطة
+      // (عشان ما نلغي عرض المسار أو نقاطعه أثناء التتبع المباشر)
       map.setView([lat, lon], map.getZoom());
     }
 
@@ -742,7 +747,11 @@
         currentLon = longitude;
         setUserLocation(latitude, longitude, accuracy);
         if (typeof heading === "number" && !isNaN(heading)) setUserHeading(heading);
-        recomputeAndRender();
+
+        if (Date.now() - lastLiveRenderAt > LIVE_RENDER_MIN_INTERVAL_MS) {
+          lastLiveRenderAt = Date.now();
+          recomputeAndRender();
+        }
 
         const distanceThreshold = LIVE_REFETCH_DISTANCE[currentMode] || LIVE_REFETCH_DISTANCE.walk;
         const movedFar =
@@ -1037,6 +1046,7 @@
         setStatus(`تم العثور على ${total} دورة مياه قريبة.`);
       }
 
+      lastLiveRenderAt = Date.now();
       recomputeAndRender();
     } finally {
       fetchInFlight = false;
