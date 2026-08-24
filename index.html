@@ -5,9 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>أقرب دورة مياه</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-  crossorigin=""/>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
 
 <style>
   :root{
@@ -141,12 +139,12 @@
     flex-shrink: 0;
   }
 
-  #modeSelector {
+  #modeSelector, #urgencySelector {
     display: flex;
     gap: 6px;
   }
 
-  .mode-btn {
+  .mode-btn, .urgency-btn {
     flex: 1;
     padding: 8px 4px;
     border-radius: 8px;
@@ -158,11 +156,15 @@
     font-family: inherit;
     white-space: nowrap;
   }
-  .mode-btn.active {
+  .mode-btn.active, .urgency-btn.active {
     background: var(--primary);
     border-color: var(--primary);
     color: #fff;
     font-weight: 700;
+  }
+  .urgency-btn[data-urgent="1"].active {
+    background: var(--danger);
+    border-color: var(--danger);
   }
 
   #searchInput {
@@ -335,16 +337,17 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .leaflet-popup-content { direction: rtl; font-size: 13px; }
-  html.dark-mode .leaflet-tile-pane {
-    filter: invert(1) hue-rotate(180deg) brightness(0.93) contrast(0.9);
-  }
-  html.dark-mode .leaflet-popup-content-wrapper,
-  html.dark-mode .leaflet-popup-tip {
+  .maplibregl-popup-content {
+    direction: rtl;
+    font-size: 13px;
     background: var(--card-bg);
     color: var(--text);
   }
-  html.dark-mode .leaflet-container { background: #0b1524; }
+  .maplibregl-popup-tip { border-top-color: var(--card-bg) !important; }
+  .maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: var(--card-bg) !important; }
+
+  /* الخريطة نفسها (MapLibre) تبقى بألوانها الطبيعية دائمًا بغض النظر عن الوضع الليلي،
+     عشان تفعيل الوضع الليلي على خريطة متجهية ملوّنة (بدل بلاطات مسطحة) يشوّه الألوان بدل ما يحسّنها */
 
   @media (min-width: 768px) {
     main { flex-direction: row; }
@@ -375,12 +378,15 @@
       <button class="mode-btn" data-mode="bike">🛵 دراجة</button>
       <button class="mode-btn" data-mode="car">🚗 سيارة</button>
     </div>
+    <div id="urgencySelector">
+      <button class="urgency-btn active" data-urgent="0">💧 حاجة عادية</button>
+      <button class="urgency-btn" data-urgent="1">🚨 حاجة ماسة</button>
+    </div>
     <input id="searchInput" type="search" placeholder="🔍 ابحث بالاسم..." autocomplete="off">
     <div id="filterChips">
       <button class="chip" data-filter="free">مجانية</button>
       <button class="chip" data-filter="wheelchair">ذوي الاحتياجات</button>
       <button class="chip" data-filter="favorites">⭐ المفضلة</button>
-      <button class="chip" data-filter="confirmedOnly">🚻 دورات مياه مؤكدة فقط</button>
     </div>
   </div>
 
@@ -393,13 +399,13 @@
   </main>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-  crossorigin=""></script>
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
 
 <script>
 (function () {
   "use strict";
+
+  const MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 
   // وسيلة التنقل: تحدد نطاق البحث وسرعة تقدير الوقت
   const MODES = {
@@ -430,12 +436,17 @@
   const searchInput = document.getElementById("searchInput");
   const filterChipsEl = document.getElementById("filterChips");
   const modeSelectorEl = document.getElementById("modeSelector");
+  const urgencySelectorEl = document.getElementById("urgencySelector");
   const listEl = document.getElementById("list");
   const emptyMsg = document.getElementById("emptyMsg");
   const mapEl = document.getElementById("map");
 
-  let map, userMarker, userCircle, routeLine;
-  const toiletMarkers = new Map(); // id -> marker
+  let map, userMarker;
+  let mapStyleLoaded = false;
+  const toiletMarkers = new Map(); // id -> maplibregl.Marker
+
+  const EMPTY_LINE = { type: "Feature", geometry: { type: "LineString", coordinates: [] }, properties: {} };
+  const EMPTY_POLY = { type: "Feature", geometry: { type: "Polygon", coordinates: [[]] }, properties: {} };
 
   let currentLat = null;
   let currentLon = null;
@@ -529,6 +540,18 @@
     }
   });
 
+  // ---------- درجة الحاجة (عادية/ماسة) ----------
+  // "حاجة ماسة" تفعّل فلتر "دورات المياه المؤكدة فقط" تلقائيًا،
+  // لأن المساجد/المقاهي/المطاعم غير مضمونة وما تصلح لحاجة عاجلة
+  urgencySelectorEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".urgency-btn");
+    if (!btn) return;
+    urgencySelectorEl.querySelectorAll(".urgency-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    filters.confirmedOnly = btn.dataset.urgent === "1";
+    recomputeAndRender();
+  });
+
   function formatDuration(meters, speedKmh) {
     const mins = Math.round((meters / 1000 / speedKmh) * 60);
     if (mins < 1) return "أقل من دقيقة";
@@ -545,7 +568,6 @@
     return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${place.lat},${place.lon}&travelmode=${travelmode}`;
   }
 
-  // كل وسيلة تنقل تتبع شبكة طرق مختلفة (سيارات، دراجات، ممرات مشاة)
   const OSRM_BASE = "https://router.project-osrm.org/route/v1";
   const OSRM_PROFILES = { walk: "foot", bike: "cycling", car: "driving" };
   const ROUTE_COLOR = "#dc2626";
@@ -567,111 +589,190 @@
     if (data.code !== "Ok" || !data.routes || !data.routes.length) throw new Error("OSRM: لا يوجد مسار");
     const route = data.routes[0];
     return {
-      latlngs: route.geometry.coordinates.map(([lon, lat]) => [lat, lon]),
+      coords: route.geometry.coordinates, // [lon,lat] already، متوافق مع MapLibre مباشرة
       distance: route.distance,
       duration: route.duration
     };
   }
 
+  function setLineData(sourceId, coordinates) {
+    if (!mapStyleLoaded) return;
+    const src = map.getSource(sourceId);
+    if (!src) return;
+    src.setData(
+      coordinates.length
+        ? { type: "Feature", geometry: { type: "LineString", coordinates }, properties: {} }
+        : EMPTY_LINE
+    );
+  }
+
+  function boundsFromCoords(coords) {
+    const bounds = new maplibregl.LngLatBounds();
+    coords.forEach((c) => bounds.extend(c));
+    return bounds;
+  }
+
   let routeRequestToken = 0;
 
   async function drawRouteTo(place) {
-    if (routeLine) {
-      map.removeLayer(routeLine);
-      routeLine = null;
-    }
+    setLineData("route-real", []);
     if (currentLat == null) {
-      map.setView([place.lat, place.lon], 18, { animate: true });
+      map.flyTo({ center: [place.lon, place.lat], zoom: 18, essential: true });
       return;
     }
 
     const myToken = ++routeRequestToken;
     const origin = { lat: currentLat, lon: currentLon };
-    const color = ROUTE_COLOR;
+    const straight = [[origin.lon, origin.lat], [place.lon, place.lat]];
 
-    // خط مستقيم مؤقت ريثما يوصل المسار الفعلي على الطرق
-    routeLine = L.polyline(
-      [[origin.lat, origin.lon], [place.lat, place.lon]],
-      { color, weight: 3, dashArray: "6 10", opacity: 0.7 }
-    ).addTo(map);
-    map.fitBounds(routeLine.getBounds(), { padding: [50, 50], maxZoom: 17 });
+    setLineData("route-temp", straight);
+    map.fitBounds(boundsFromCoords(straight), { padding: 60, maxZoom: 17 });
 
     const profile = OSRM_PROFILES[currentMode] || "foot";
     try {
       const route = await fetchRoadRoute(origin.lat, origin.lon, place.lat, place.lon, profile);
       if (myToken !== routeRequestToken) return; // المستخدم اختار مكانًا آخر بالأثناء
 
-      map.removeLayer(routeLine);
-      routeLine = L.polyline(route.latlngs, { color, weight: 5, opacity: 0.85 }).addTo(map);
-      routeLine.bindPopup(`🧭 ${formatDistance(route.distance)} · ${formatSeconds(route.duration)} على الطريق`);
-      map.fitBounds(routeLine.getBounds(), { padding: [50, 50], maxZoom: 17 });
+      setLineData("route-temp", []);
+      setLineData("route-real", route.coords);
+      map.fitBounds(boundsFromCoords(route.coords), { padding: 60, maxZoom: 17 });
+      setStatus(`🧭 المسار الفعلي: ${formatDistance(route.distance)} · ${formatSeconds(route.duration)} على الطريق`);
     } catch (e) {
       if (myToken !== routeRequestToken) return;
-      routeLine.bindPopup("⚠️ تعذّر جلب مسار فعلي على الطرق، هذا خط تقريبي مباشر.");
+      setStatus("⚠️ تعذّر جلب مسار فعلي على الطرق، هذا خط تقريبي مباشر.", "error");
     }
   }
 
-  // ---------- أيقونات الخريطة ----------
-  const userIcon = L.divIcon({
-    className: "",
-    html:
-      '<div class="heading-wrap" style="width:32px;height:32px;position:relative;">' +
-      '<div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:0;height:0;' +
-      'border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #2563eb;"></div>' +
-      '<div style="position:absolute;top:9px;left:9px;width:14px;height:14px;border-radius:50%;' +
-      'background:#2563eb;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.5);"></div>' +
-      "</div>",
-    iconSize: [32, 32],
-    iconAnchor: [16, 16]
-  });
+  // ---------- أيقونات الأماكن (HTML خام، عنصر جديد لكل Marker) ----------
+  function elementFromHTML(html) {
+    const wrap = document.createElement("div");
+    wrap.innerHTML = html.trim();
+    return wrap.firstElementChild;
+  }
 
-  // يدوّر سهم الاتجاه فوق نقطة المستخدم حسب البوصلة/اتجاه الحركة
+  const userMarkerHTML =
+    '<div class="heading-wrap" style="width:32px;height:32px;position:relative;">' +
+    '<div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:0;height:0;' +
+    'border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #2563eb;"></div>' +
+    '<div style="position:absolute;top:9px;left:9px;width:14px;height:14px;border-radius:50%;' +
+    'background:#2563eb;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.5);"></div>' +
+    "</div>";
+
   function setUserHeading(deg) {
     if (!userMarker) return;
     const el = userMarker.getElement();
-    if (!el) return;
-    const wrap = el.querySelector(".heading-wrap");
+    const wrap = el && el.querySelector(".heading-wrap");
     if (wrap) wrap.style.transform = `rotate(${deg}deg)`;
   }
 
-  function makePlaceIcon(bgColor, emoji) {
-    return L.divIcon({
-      className: "",
-      html: `<div style="background:${bgColor};width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:13px;">${emoji}</span></div>`,
-      iconSize: [26, 26],
-      iconAnchor: [13, 26],
-      popupAnchor: [0, -26]
+  function makePlaceIconHTML(bgColor, emoji) {
+    return `<div style="background:${bgColor};width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:13px;">${emoji}</span></div>`;
+  }
+
+  const CATEGORY_ICON_HTML = {
+    toilet: makePlaceIconHTML("#1d4ed8", "🚻"),
+    mosque: makePlaceIconHTML("#7c3aed", "🕌"),
+    cafe: makePlaceIconHTML("#b45309", "☕"),
+    restaurant: makePlaceIconHTML("#db2777", "🍽️"),
+    fast_food: makePlaceIconHTML("#db2777", "🍽️")
+  };
+  const customIconHTML = makePlaceIconHTML("#ea580c", "🚻");
+
+  function iconHtmlForPlace(place) {
+    if (place.isCustom) return customIconHTML;
+    return CATEGORY_ICON_HTML[place.category] || CATEGORY_ICON_HTML.toilet;
+  }
+
+  // ---------- تهيئة الخريطة (MapLibre GL — متجهية 3D، تدعم الميلان والدوران) ----------
+  function makeCirclePolygon(lat, lon, radiusMeters, points) {
+    points = points || 48;
+    const coords = [];
+    const distX = radiusMeters / (111320 * Math.cos((lat * Math.PI) / 180));
+    const distY = radiusMeters / 110540;
+    for (let i = 0; i <= points; i++) {
+      const theta = (i / points) * 2 * Math.PI;
+      coords.push([lon + distX * Math.cos(theta), lat + distY * Math.sin(theta)]);
+    }
+    return coords;
+  }
+
+  let pendingAccuracy = null;
+
+  function updateAccuracyCircle(lat, lon, accuracy) {
+    if (!mapStyleLoaded) {
+      pendingAccuracy = accuracy ? { lat, lon, accuracy } : null;
+      return;
+    }
+    const src = map.getSource("accuracy-circle");
+    if (!src) return;
+    if (!accuracy) {
+      src.setData(EMPTY_POLY);
+      return;
+    }
+    src.setData({
+      type: "Feature",
+      geometry: { type: "Polygon", coordinates: [makeCirclePolygon(lat, lon, accuracy)] },
+      properties: {}
     });
   }
 
-  const CATEGORY_ICONS = {
-    toilet: makePlaceIcon("#1d4ed8", "🚻"),
-    mosque: makePlaceIcon("#7c3aed", "🕌"),
-    cafe: makePlaceIcon("#b45309", "☕"),
-    restaurant: makePlaceIcon("#db2777", "🍽️"),
-    fast_food: makePlaceIcon("#db2777", "🍽️")
-  };
-  const customIcon = makePlaceIcon("#ea580c", "🚻");
-
-  function iconForPlace(place) {
-    if (place.isCustom) return customIcon;
-    return CATEGORY_ICONS[place.category] || CATEGORY_ICONS.toilet;
-  }
-
-  // ---------- تهيئة الخريطة ----------
   function initMap(lat, lon) {
-    map = L.map("map", { zoomControl: true }).setView([lat, lon], 16);
+    map = new maplibregl.Map({
+      container: "map",
+      style: MAP_STYLE_URL,
+      center: [lon, lat],
+      zoom: 16,
+      pitch: 45,
+      bearing: 0,
+      attributionControl: true
+    });
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-left");
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19
-    }).addTo(map);
+    map.on("load", () => {
+      mapStyleLoaded = true;
+
+      map.addSource("accuracy-circle", { type: "geojson", data: EMPTY_POLY });
+      map.addLayer({
+        id: "accuracy-circle-fill",
+        type: "fill",
+        source: "accuracy-circle",
+        paint: { "fill-color": "#2563eb", "fill-opacity": 0.08 }
+      });
+      map.addLayer({
+        id: "accuracy-circle-outline",
+        type: "line",
+        source: "accuracy-circle",
+        paint: { "line-color": "#2563eb", "line-width": 1 }
+      });
+
+      map.addSource("route-temp", { type: "geojson", data: EMPTY_LINE });
+      map.addLayer({
+        id: "route-temp-layer",
+        type: "line",
+        source: "route-temp",
+        layout: { "line-cap": "round" },
+        paint: { "line-color": ROUTE_COLOR, "line-width": 3, "line-dasharray": [1, 2], "line-opacity": 0.7 }
+      });
+
+      map.addSource("route-real", { type: "geojson", data: EMPTY_LINE });
+      map.addLayer({
+        id: "route-real-layer",
+        type: "line",
+        source: "route-real",
+        layout: { "line-cap": "round" },
+        paint: { "line-color": ROUTE_COLOR, "line-width": 5, "line-opacity": 0.85 }
+      });
+
+      if (pendingAccuracy) {
+        updateAccuracyCircle(pendingAccuracy.lat, pendingAccuracy.lon, pendingAccuracy.accuracy);
+      }
+    });
 
     map.on("click", (e) => {
       if (addMode) {
-        handleAddPlaceClick(e.latlng.lat, e.latlng.lng);
+        handleAddPlaceClick(e.lngLat.lat, e.lngLat.lng);
       } else {
-        updateLocationManually(e.latlng.lat, e.latlng.lng);
+        updateLocationManually(e.lngLat.lat, e.lngLat.lng);
       }
     });
   }
@@ -683,31 +784,24 @@
     } else if (isFirstFix) {
       // نتوسّط تلقائيًا بأول تحديد موقع بس، بعد كذا نسيب المستخدم يتحكم بالخريطة
       // (عشان ما نلغي عرض المسار أو نقاطعه أثناء التتبع المباشر)
-      map.setView([lat, lon], map.getZoom());
+      map.setCenter([lon, lat]);
     }
 
+    updateAccuracyCircle(lat, lon, accuracy);
+
     if (userMarker) {
-      userMarker.setLatLng([lat, lon]);
-      if (accuracy) userCircle.setLatLng([lat, lon]).setRadius(accuracy).addTo(map);
-      else map.removeLayer(userCircle);
+      userMarker.setLngLat([lon, lat]);
     } else {
-      userMarker = L.marker([lat, lon], { icon: userIcon, draggable: true })
-        .addTo(map)
-        .bindPopup("موقعك الحالي — اسحبني إذا كان الموقع غير دقيق");
+      const el = elementFromHTML(userMarkerHTML);
+      userMarker = new maplibregl.Marker({ element: el, draggable: true })
+        .setLngLat([lon, lat])
+        .setPopup(new maplibregl.Popup({ offset: 18 }).setHTML("موقعك الحالي — اسحبني إذا كان الموقع غير دقيق"))
+        .addTo(map);
 
       userMarker.on("dragend", () => {
-        const p = userMarker.getLatLng();
+        const p = userMarker.getLngLat();
         updateLocationManually(p.lat, p.lng);
       });
-
-      userCircle = L.circle([lat, lon], {
-        radius: accuracy || 0,
-        color: "#2563eb",
-        fillColor: "#2563eb",
-        fillOpacity: 0.08,
-        weight: 1
-      });
-      if (accuracy) userCircle.addTo(map);
     }
   }
 
@@ -989,10 +1083,8 @@
     lastFetchLat = lat;
     lastFetchLon = lon;
     lastFetchAt = Date.now();
-    if (routeLine) {
-      map.removeLayer(routeLine);
-      routeLine = null;
-    }
+    setLineData("route-temp", []);
+    setLineData("route-real", []);
     setStatus("جارِ البحث عن دورات المياه القريبة...");
     const query = buildQuery(lat, lon);
 
@@ -1099,7 +1191,7 @@
 
   // ---------- عرض القائمة والخريطة ----------
   function clearToiletMarkers() {
-    toiletMarkers.forEach((m) => map.removeLayer(m));
+    toiletMarkers.forEach((m) => m.remove());
     toiletMarkers.clear();
   }
 
@@ -1110,18 +1202,21 @@
 
     places.forEach((place) => {
       // marker على الخريطة
-      const marker = L.marker([place.lat, place.lon], {
-        icon: iconForPlace(place)
-      }).addTo(map);
+      const el = elementFromHTML(iconHtmlForPlace(place));
       const speedKmh = MODES[currentMode].speedKmh;
-      marker.bindPopup(
+      const popupHtml =
         `<b>${escapeHtml(place.name)}</b><br>${
           place.distance != null
             ? formatDistance(place.distance) + " · " + formatDuration(place.distance, speedKmh) + " تقريبًا<br>"
             : ""
-        }<a href="${getDirectionsUrl(place)}" target="_blank" rel="noopener" style="color:#1d4ed8;font-weight:600;">🧭 الاتجاهات</a>`
-      );
-      marker.on("click", () => {
+        }<a href="${getDirectionsUrl(place)}" target="_blank" rel="noopener" style="color:#1d4ed8;font-weight:600;">🧭 الاتجاهات</a>`;
+
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([place.lon, place.lat])
+        .setPopup(new maplibregl.Popup({ offset: 20 }).setHTML(popupHtml))
+        .addTo(map);
+
+      el.addEventListener("click", () => {
         document.querySelectorAll(".place-card").forEach((c) => c.classList.remove("active"));
         const li = listEl.querySelector(`[data-id="${CSS.escape(place.id)}"]`);
         if (li) li.classList.add("active");
@@ -1185,7 +1280,7 @@
         document.querySelectorAll(".place-card").forEach((c) => c.classList.remove("active"));
         li.classList.add("active");
         drawRouteTo(place);
-        marker.openPopup();
+        marker.togglePopup();
       });
 
       listEl.appendChild(li);
