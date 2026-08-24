@@ -650,12 +650,16 @@
     return wrap.firstElementChild;
   }
 
+  // العنصر الخارجي بدون position:relative عشان MapLibre يتحكم بموضعه بحرية (transform: translate).
+  // سهم الاتجاه يدور على عنصر داخلي (.heading-wrap) مستقل حتى ما يتعارض مع تموضع العلامة.
   const userMarkerHTML =
-    '<div class="heading-wrap" style="width:32px;height:32px;">' +
+    '<div style="width:32px;height:32px;">' +
+    '<div class="heading-wrap" style="width:32px;height:32px;position:relative;">' +
     '<div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:0;height:0;' +
     'border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #2563eb;"></div>' +
     '<div style="position:absolute;top:9px;left:9px;width:14px;height:14px;border-radius:50%;' +
     'background:#2563eb;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.5);"></div>' +
+    "</div>" +
     "</div>";
 
   function setUserHeading(deg) {
