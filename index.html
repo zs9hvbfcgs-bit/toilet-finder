@@ -351,6 +351,10 @@
   html.dark-mode .tag.warn { background: #3a2e12; color: #fbbf24; }
   .tag.visited { background: #efe6da; color: #5c4326; }
   html.dark-mode .tag.visited { background: #3a2e22; color: #d8bd9c; }
+  .tag.open { background: #dcfce7; color: #15803d; }
+  html.dark-mode .tag.open { background: #14321f; color: #4ade80; }
+  .tag.closed { background: #fee2e2; color: #b91c1c; }
+  html.dark-mode .tag.closed { background: #3a1616; color: #f87171; }
 
   .place-side {
     display: flex;
@@ -1119,6 +1123,118 @@
     return (m / 1000).toFixed(1) + " كم";
   }
 
+  // ---------- احترام أوقات العمل (opening_hours من OSM) ----------
+  // محلل مبسّط يغطي أكثر الصيغ شيوعًا (24/7، Mo-Fr، قوائم أيام، عدة فترات، off، فترات تعبر منتصف الليل).
+  // أي صيغة غير مدعومة (عطل رسمية PH، مواسم، إلخ) تُعتبر "غير معروفة" ونعرض النص الخام بدل تخمين خاطئ.
+  const OH_DAY_INDEX = { Su: 0, Mo: 1, Tu: 2, We: 3, Th: 4, Fr: 5, Sa: 6 };
+  const OH_DAY_RE = "(?:Mo|Tu|We|Th|Fr|Sa|Su)";
+
+  function ohExpandDays(dayPart) {
+    const days = new Set();
+    dayPart.split(",").forEach((seg) => {
+      seg = seg.trim();
+      const range = seg.match(/^(Mo|Tu|We|Th|Fr|Sa|Su)-(Mo|Tu|We|Th|Fr|Sa|Su)$/);
+      if (range) {
+        let d = OH_DAY_INDEX[range[1]];
+        const end = OH_DAY_INDEX[range[2]];
+        while (true) {
+          days.add(d);
+          if (d === end) break;
+          d = (d + 1) % 7;
+        }
+      } else if (OH_DAY_INDEX[seg] !== undefined) {
+        days.add(OH_DAY_INDEX[seg]);
+      }
+    });
+    return days;
+  }
+
+  function ohParseTimeRange(t) {
+    const m = t.trim().match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
+    if (!m) return null;
+    return [parseInt(m[1]) * 60 + parseInt(m[2]), parseInt(m[3]) * 60 + parseInt(m[4])];
+  }
+
+  function parseOpeningHours(oh) {
+    if (!oh) return null;
+    const s = oh.trim();
+    if (/^24\/7$/i.test(s)) return { rules: [{ days: new Set([0, 1, 2, 3, 4, 5, 6]), times: [[0, 1440]], off: false }] };
+
+    const dayListRe = new RegExp(`^(${OH_DAY_RE}(?:-${OH_DAY_RE})?(?:,${OH_DAY_RE}(?:-${OH_DAY_RE})?)*)\\s+(.+)$`, "i");
+    const rules = [];
+
+    for (let rule of s.split(";")) {
+      rule = rule.trim();
+      if (!rule) continue;
+      rule = rule.replace(/\([^)]*\)/g, "").trim(); // نتجاهل الملاحظات بين قوسين
+
+      const m = rule.match(dayListRe);
+      let dayPart = null;
+      let rest = rule;
+      if (m) {
+        dayPart = m[1];
+        rest = m[2].trim();
+      }
+
+      if (/^off$/i.test(rest)) {
+        if (!dayPart) continue;
+        rules.push({ days: ohExpandDays(dayPart), times: [], off: true });
+        continue;
+      }
+
+      const times = rest.split(",").map(ohParseTimeRange).filter(Boolean);
+      if (!times.length) continue; // صيغة غير مدعومة، نتجاهلها بأمان
+
+      rules.push({
+        days: dayPart ? ohExpandDays(dayPart) : new Set([0, 1, 2, 3, 4, 5, 6]),
+        times,
+        off: false
+      });
+    }
+
+    return rules.length ? { rules } : null;
+  }
+
+  function isOpenNow(openingHoursStr, now) {
+    now = now || new Date();
+    const parsed = parseOpeningHours(openingHoursStr);
+    if (!parsed) return null;
+
+    const today = now.getDay();
+    const yesterday = (today + 6) % 7;
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    let matched = false;
+    let open = false;
+
+    parsed.rules.forEach((rule) => {
+      if (rule.days.has(today)) {
+        matched = true;
+        if (rule.off) {
+          open = false;
+        } else {
+          rule.times.forEach(([start, end]) => {
+            if (end > start) {
+              if (minutes >= start && minutes < end) open = true;
+            } else if (minutes >= start) {
+              open = true; // بداية فترة تعبر منتصف الليل
+            }
+          });
+        }
+      }
+      // فترة الأمس اللي تعبر منتصف الليل ولسه مستمرة اليوم
+      if (rule.days.has(yesterday) && !rule.off) {
+        rule.times.forEach(([start, end]) => {
+          if (end <= start && minutes < end) {
+            matched = true;
+            open = true;
+          }
+        });
+      }
+    });
+
+    return matched ? open : null;
+  }
+
   // ---------- طلب الموقع ----------
   function requestLocation() {
     if (!navigator.geolocation) {
@@ -1375,12 +1491,21 @@
 
       const categoryLabel = CATEGORY_LABELS[place.category];
       const isVisited = visited.has(place.id);
+      const openStatus = place.openingHours ? isOpenNow(place.openingHours) : null;
+      let hoursTagHtml = "";
+      if (openStatus === true) {
+        hoursTagHtml = `<span class="tag open" title="${escapeHtml(place.openingHours)}">🟢 مفتوح الآن</span>`;
+      } else if (openStatus === false) {
+        hoursTagHtml = `<span class="tag closed" title="${escapeHtml(place.openingHours)}">🔴 مغلق الآن</span>`;
+      } else if (place.openingHours) {
+        hoursTagHtml = `<span class="tag">${escapeHtml(place.openingHours)}</span>`;
+      }
       const tagsHtml = [
         isVisited ? `<span class="tag visited">💩 استخدمتها من قبل</span>` : "",
         categoryLabel ? `<span class="tag warn">${categoryLabel} — قد يتوفر مرحاض للعملاء</span>` : "",
         place.fee ? `<span class="tag">${place.fee}</span>` : "",
         place.wheelchair ? `<span class="tag">${place.wheelchair}</span>` : "",
-        place.openingHours ? `<span class="tag">${escapeHtml(place.openingHours)}</span>` : "",
+        hoursTagHtml,
         place.isCustom ? `<span class="tag">أضافها مستخدم</span>` : ""
       ].join("");
 
