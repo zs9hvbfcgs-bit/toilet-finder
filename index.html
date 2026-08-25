@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>أقرب دورة مياه</title>
 
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1d4ed8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="دورة مياه">
+
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
 
 <style>
@@ -46,6 +55,46 @@
     flex-direction: column;
     height: 100vh;
     height: 100dvh;
+  }
+
+  #splash {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: var(--primary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    transition: opacity 0.25s ease;
+  }
+  #splash.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  #splash-logo {
+    width: 132px;
+    height: 132px;
+    border-radius: 30px;
+    background: rgba(255, 255, 255, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 68px;
+  }
+  #splash-title {
+    color: #fff;
+    font-size: 19px;
+    font-weight: 700;
+  }
+  .splash-spinner {
+    width: 22px;
+    height: 22px;
+    border: 3px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
   }
 
   header {
@@ -358,6 +407,12 @@
 </head>
 <body>
 
+<div id="splash">
+  <div id="splash-logo">🚻</div>
+  <div id="splash-title">أقرب دورة مياه</div>
+  <div class="splash-spinner"></div>
+</div>
+
 <div id="app">
   <header>
     <h1>🚻 أقرب دورة مياه</h1>
@@ -440,6 +495,13 @@
   const listEl = document.getElementById("list");
   const emptyMsg = document.getElementById("emptyMsg");
   const mapEl = document.getElementById("map");
+  const splashEl = document.getElementById("splash");
+
+  function hideSplash() {
+    splashEl.classList.add("hidden");
+  }
+  // شبكة أمان: ما نخلي شاشة البداية تعلّق لو تأخر إذن الموقع أو تعثّر لأي سبب
+  setTimeout(hideSplash, 6000);
 
   let map, userMarker;
   let mapStyleLoaded = false;
@@ -986,6 +1048,7 @@
   function requestLocation() {
     if (!navigator.geolocation) {
       setStatus("المتصفح لا يدعم تحديد الموقع (Geolocation).", "error");
+      hideSplash();
       return;
     }
 
@@ -997,6 +1060,7 @@
         const { latitude, longitude, accuracy } = pos.coords;
         setUserLocation(latitude, longitude, accuracy);
         fetchToilets(latitude, longitude);
+        hideSplash();
         if (accuracy && accuracy > 300) {
           setTimeout(() => {
             setStatus(
@@ -1008,6 +1072,7 @@
       },
       (err) => {
         setLoading(false);
+        hideSplash();
         let msg = "تعذّر تحديد موقعك.";
         if (err.code === err.PERMISSION_DENIED) {
           msg = "تم رفض إذن الوصول للموقع. فعّله من إعدادات المتصفح للمتابعة.";
