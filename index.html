@@ -204,11 +204,11 @@
 
   #modeSelector, #urgencySelector {
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
   }
 
   .mode-btn, .urgency-btn {
-    flex: 1;
     padding: 8px 4px;
     border-radius: 8px;
     border: 1px solid var(--border);
@@ -220,6 +220,8 @@
     white-space: nowrap;
     transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
   }
+  .mode-btn { flex: 1 1 30%; }
+  .urgency-btn { flex: 1 1 45%; }
   .mode-btn:active, .urgency-btn:active { transform: scale(0.94); }
   .mode-btn.active, .urgency-btn.active {
     background: var(--primary);
@@ -460,6 +462,7 @@
     <div class="header-actions">
       <button id="addBtn" class="icon-btn" title="إضافة مكان مفقود" aria-label="إضافة مكان مفقود">➕</button>
       <button id="trackBtn" class="icon-btn" title="تتبع مباشر (GPS)" aria-label="تتبع مباشر">🛰️</button>
+      <button id="recenterBtn" class="icon-btn" title="تمركز على موقعي" aria-label="تمركز على موقعي">🎯</button>
       <button id="themeBtn" class="icon-btn" title="تبديل الوضع الليلي" aria-label="تبديل الوضع الليلي">🌙</button>
       <button id="refreshBtn">تحديث الموقع</button>
     </div>
@@ -471,7 +474,9 @@
   <div id="toolbar">
     <div id="modeSelector">
       <button class="mode-btn" data-mode="walk">🚶 مشي</button>
-      <button class="mode-btn" data-mode="bike">🛵 دراجة</button>
+      <button class="mode-btn" data-mode="bike">🚲 دراجة</button>
+      <button class="mode-btn" data-mode="scooter">🛵 تروتينة</button>
+      <button class="mode-btn" data-mode="moto">🏍️ موتو</button>
       <button class="mode-btn" data-mode="car">🚗 سيارة</button>
     </div>
     <div id="urgencySelector">
@@ -503,11 +508,13 @@
 
   const MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 
-  // وسيلة التنقل: تحدد نطاق البحث وسرعة تقدير الوقت
+  // وسيلة التنقل: تحدد نطاق البحث، سرعة تقدير الوقت، ملف توجيه OSRM، ومسافة إعادة البحث أثناء التتبع المباشر
   const MODES = {
-    walk: { label: "مشي", radius: 1500, speedKmh: 5 },
-    bike: { label: "دراجة/سكوتر", radius: 4000, speedKmh: 15 },
-    car: { label: "سيارة", radius: 8000, speedKmh: 30 }
+    walk: { label: "مشي", radius: 1500, speedKmh: 5, osrmProfile: "foot", googleTravelMode: "walking", refetchDistance: 300 },
+    bike: { label: "دراجة", radius: 3000, speedKmh: 15, osrmProfile: "cycling", googleTravelMode: "bicycling", refetchDistance: 800 },
+    scooter: { label: "تروتينة", radius: 3000, speedKmh: 20, osrmProfile: "cycling", googleTravelMode: "bicycling", refetchDistance: 1000 },
+    moto: { label: "موتو", radius: 6000, speedKmh: 40, osrmProfile: "driving", googleTravelMode: "driving", refetchDistance: 1500 },
+    car: { label: "سيارة", radius: 8000, speedKmh: 30, osrmProfile: "driving", googleTravelMode: "driving", refetchDistance: 2000 }
   };
 
   // عدة مرايا لـ Overpass API لتفادي فشل خادم واحد
@@ -529,6 +536,7 @@
   const refreshBtn = document.getElementById("refreshBtn");
   const addBtn = document.getElementById("addBtn");
   const trackBtn = document.getElementById("trackBtn");
+  const recenterBtn = document.getElementById("recenterBtn");
   const themeBtn = document.getElementById("themeBtn");
   const searchInput = document.getElementById("searchInput");
   const filterChipsEl = document.getElementById("filterChips");
@@ -560,9 +568,8 @@
   let liveTracking = false;
   let watchId = null;
   let fetchInFlight = false;
-  // مسافة إعادة البحث تتناسب مع سرعة وسيلة التنقل، وبحد أدنى 20 ثانية بين كل طلب
-  // عشان ما نثقل على خادم Overpass المجاني (خصوصًا بوضع السيارة/الدراجة)
-  const LIVE_REFETCH_DISTANCE = { walk: 300, bike: 800, car: 2000 };
+  // مسافة إعادة البحث تتناسب مع سرعة وسيلة التنقل (MODES[mode].refetchDistance)، وبحد أدنى 20 ثانية بين كل طلب
+  // عشان ما نثقل على خادم Overpass المجاني (خصوصًا بوضع السيارة/الموتو)
   const LIVE_REFETCH_MIN_INTERVAL_MS = 20000;
   let lastLiveRenderAt = 0;
   const LIVE_RENDER_MIN_INTERVAL_MS = 4000; // ما نعيد بناء القائمة كل نبضة GPS، كل 4 ثواني كفاية
@@ -677,13 +684,12 @@
 
   // ---------- المسار والاتجاهات ----------
   function getDirectionsUrl(place) {
-    const travelmode = currentMode === "car" ? "driving" : currentMode === "bike" ? "bicycling" : "walking";
+    const travelmode = MODES[currentMode].googleTravelMode;
     const origin = currentLat != null ? `${currentLat},${currentLon}` : "";
     return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${place.lat},${place.lon}&travelmode=${travelmode}`;
   }
 
   const OSRM_BASE = "https://router.project-osrm.org/route/v1";
-  const OSRM_PROFILES = { walk: "foot", bike: "cycling", car: "driving" };
   const ROUTE_COLOR = "#dc2626";
 
   function formatSeconds(sec) {
@@ -742,7 +748,7 @@
     setLineData("route-temp", straight);
     map.fitBounds(boundsFromCoords(straight), { padding: 60, maxZoom: 17 });
 
-    const profile = OSRM_PROFILES[currentMode] || "foot";
+    const profile = MODES[currentMode].osrmProfile;
     try {
       const route = await fetchRoadRoute(origin.lat, origin.lon, place.lat, place.lon, profile);
       if (myToken !== routeRequestToken) return; // المستخدم اختار مكانًا آخر بالأثناء
@@ -967,7 +973,7 @@
           recomputeAndRender();
         }
 
-        const distanceThreshold = LIVE_REFETCH_DISTANCE[currentMode] || LIVE_REFETCH_DISTANCE.walk;
+        const distanceThreshold = MODES[currentMode].refetchDistance;
         const movedFar =
           lastFetchLat == null ||
           distanceMeters(lastFetchLat, lastFetchLon, latitude, longitude) > distanceThreshold;
@@ -1010,6 +1016,14 @@
     } else {
       startLiveTracking();
     }
+  });
+
+  recenterBtn.addEventListener("click", () => {
+    if (currentLat == null || !map) {
+      setStatus("ما عندنا موقعك بعد، اضغط تحديث الموقع أولًا.", "error");
+      return;
+    }
+    map.flyTo({ center: [currentLon, currentLat], zoom: Math.max(map.getZoom(), 16), essential: true });
   });
 
   // ---------- وضع إضافة مكان مفقود ----------
