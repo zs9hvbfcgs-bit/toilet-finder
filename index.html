@@ -354,6 +354,8 @@
   html.dark-mode .tag.open { background: #14321f; color: #4ade80; }
   .tag.closed { background: #fee2e2; color: #b91c1c; }
   html.dark-mode .tag.closed { background: #3a1616; color: #f87171; }
+  .tag.rating { background: #fef3c7; color: #92400e; cursor: help; }
+  html.dark-mode .tag.rating { background: #3a2e12; color: #fbbf24; }
 
   .place-side {
     display: flex;
@@ -374,7 +376,7 @@
     white-space: nowrap;
   }
 
-  .star-btn, .delete-btn, .dir-btn, .visited-btn {
+  .star-btn, .delete-btn, .dir-btn, .visited-btn, .rate-btn {
     background: none;
     border: none;
     cursor: pointer;
@@ -400,6 +402,14 @@
   .visited-btn.active {
     opacity: 1;
     filter: none;
+  }
+  .rate-btn {
+    font-size: 15px;
+    opacity: 0.35;
+  }
+  .rate-btn.active {
+    opacity: 1;
+    animation: pop 0.3s ease;
   }
   .dir-btn {
     font-size: 16px;
@@ -531,7 +541,8 @@
     favorites: "tf_favorites",
     customPlaces: "tf_custom_places",
     mode: "tf_mode",
-    visited: "tf_visited"
+    visited: "tf_visited",
+    ratings: "tf_ratings"
   };
 
   const statusEl = document.getElementById("status");
@@ -580,6 +591,7 @@
   let customPlaces = loadJSON(LS_KEYS.customPlaces, []); // أضافها المستخدم يدويًا
   let favorites = new Set(loadJSON(LS_KEYS.favorites, []));
   let visited = new Set(loadJSON(LS_KEYS.visited, [])); // الأماكن اللي استخدمها المستخدم من قبل
+  let ratings = loadJSON(LS_KEYS.ratings, {}); // { placeId: { stars, comment, updatedAt } } — محفوظة محليًا على الجهاز
   let addMode = false;
 
   let currentMode = localStorage.getItem(LS_KEYS.mode);
@@ -1090,6 +1102,33 @@
     saveJSON(LS_KEYS.visited, [...visited]);
   }
 
+  // ---------- التقييم والتعليقات (محفوظة محليًا على جهازك فقط) ----------
+  function promptRating(place) {
+    const existing = ratings[place.id];
+    const starsInput = window.prompt(
+      "قيّم هذا المكان من 1 إلى 5 ⭐:",
+      existing ? String(existing.stars) : "5"
+    );
+    if (starsInput === null) return;
+
+    const stars = parseInt(starsInput, 10);
+    if (!Number.isInteger(stars) || stars < 1 || stars > 5) {
+      setStatus("⚠️ أدخل رقم صحيح من 1 إلى 5.", "error");
+      return;
+    }
+
+    const commentInput = window.prompt(
+      "تعليق (اختياري):",
+      existing ? existing.comment || "" : ""
+    );
+    const comment = commentInput === null ? (existing ? existing.comment || "" : "") : commentInput.trim();
+
+    ratings[place.id] = { stars, comment, updatedAt: Date.now() };
+    saveJSON(LS_KEYS.ratings, ratings);
+    setStatus("تم حفظ تقييمك.");
+    recomputeAndRender();
+  }
+
   // ---------- حالة الواجهة ----------
   function setStatus(msg, type) {
     statusEl.textContent = msg;
@@ -1493,6 +1532,7 @@
 
       const categoryLabel = CATEGORY_LABELS[place.category];
       const isVisited = visited.has(place.id);
+      const rating = ratings[place.id];
       let hoursTagHtml = "";
       if (openStatus === true) {
         hoursTagHtml = `<span class="tag open" title="${escapeHtml(place.openingHours)}">🟢 مفتوح الآن</span>`;
@@ -1501,8 +1541,12 @@
       } else if (place.openingHours) {
         hoursTagHtml = `<span class="tag">${escapeHtml(place.openingHours)}</span>`;
       }
+      const ratingTagHtml = rating
+        ? `<span class="tag rating" title="${escapeHtml(rating.comment || "")}">${"⭐".repeat(rating.stars)}${rating.comment ? " 💬" : ""}</span>`
+        : "";
       const tagsHtml = [
         isVisited ? `<span class="tag visited">💩 استخدمتها من قبل</span>` : "",
+        ratingTagHtml,
         categoryLabel ? `<span class="tag warn">${categoryLabel} — قد يتوفر مرحاض للعملاء</span>` : "",
         place.fee ? `<span class="tag">${place.fee}</span>` : "",
         place.wheelchair ? `<span class="tag">${place.wheelchair}</span>` : "",
@@ -1520,6 +1564,7 @@
         <div class="place-side">
           <button class="star-btn${isFav ? " active" : ""}" aria-label="مفضلة">${isFav ? "★" : "☆"}</button>
           <button class="visited-btn${isVisited ? " active" : ""}" aria-label="استخدمتها من قبل" title="استخدمتها من قبل">💩</button>
+          <button class="rate-btn${rating ? " active" : ""}" aria-label="قيّم هذا المكان" title="قيّم هذا المكان">✍️</button>
           <button class="dir-btn" aria-label="الاتجاهات" title="اتجاهات">🧭</button>
           <div class="place-distance">${
             place.distance != null
@@ -1534,6 +1579,11 @@
         e.stopPropagation();
         toggleFavorite(place.id);
         recomputeAndRender();
+      });
+
+      li.querySelector(".rate-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        promptRating(place);
       });
 
       li.querySelector(".visited-btn").addEventListener("click", (e) => {
