@@ -322,6 +322,20 @@
   }
   .place-card.active { border-color: var(--primary); background: var(--bg); }
 
+  .skeleton-card { cursor: default; }
+  .skeleton-line, .skeleton-pill {
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+  .skeleton-line { height: 14px; }
+  .skeleton-pill { width: 46px; height: 30px; border-radius: 8px; flex-shrink: 0; }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
   .place-info { min-width: 0; }
   .place-name {
     font-weight: 600;
@@ -993,7 +1007,7 @@
           lastFetchLat == null ||
           distanceMeters(lastFetchLat, lastFetchLon, latitude, longitude) > distanceThreshold;
         const enoughTimePassed = Date.now() - lastFetchAt > LIVE_REFETCH_MIN_INTERVAL_MS;
-        if (movedFar && enoughTimePassed && !fetchInFlight) fetchToilets(latitude, longitude);
+        if (movedFar && enoughTimePassed && !fetchInFlight) fetchToilets(latitude, longitude, false);
       },
       (err) => {
         setStatus("تعذّر متابعة موقعك مباشرة: " + err.message, "error");
@@ -1372,7 +1386,8 @@
     }
   }
 
-  async function fetchToilets(lat, lon) {
+  async function fetchToilets(lat, lon, showSkeleton) {
+    if (showSkeleton === undefined) showSkeleton = true;
     if (fetchInFlight) return; // تفادي تراكم طلبات متزامنة أثناء التتبع المباشر
     fetchInFlight = true;
 
@@ -1384,6 +1399,7 @@
     setLineData("route-temp", []);
     setLineData("route-real", []);
     setStatus("جارِ البحث عن بيوت الراحة القريبة...");
+    if (showSkeleton) renderSkeleton();
     const query = buildQuery(lat, lon);
 
     try {
@@ -1473,9 +1489,14 @@
     renderPlaces(applyFilters(all));
   }
 
+  // تأخير بسيط (debounce) عشان ما نعيد بناء القائمة والعلامات مع كل حرف يُكتب
+  let searchDebounceTimer = null;
   searchInput.addEventListener("input", () => {
-    filters.query = searchInput.value;
-    recomputeAndRender();
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      filters.query = searchInput.value;
+      recomputeAndRender();
+    }, 180);
   });
 
   filterChipsEl.addEventListener("click", (e) => {
@@ -1491,6 +1512,23 @@
   function clearToiletMarkers() {
     toiletMarkers.forEach((m) => m.remove());
     toiletMarkers.clear();
+  }
+
+  function renderSkeleton() {
+    emptyMsg.classList.remove("visible");
+    listEl.innerHTML = Array.from({ length: 4 })
+      .map(
+        () => `
+      <li class="place-card skeleton-card">
+        <div class="place-info">
+          <div class="skeleton-line" style="width:55%;"></div>
+          <div class="skeleton-line" style="width:35%;height:11px;margin-top:7px;"></div>
+        </div>
+        <div class="skeleton-pill"></div>
+      </li>
+    `
+      )
+      .join("");
   }
 
   function renderPlaces(places) {
