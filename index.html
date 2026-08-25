@@ -315,12 +315,11 @@
     transition: background 0.15s, transform 0.1s ease;
     animation: cardIn 0.35s ease both;
   }
-  .place-card:active { transform: scale(0.985); }
+  .place-card:active { transform: scale(0.985); background: var(--bg); }
   @keyframes cardIn {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
   }
-  .place-card:active { background: var(--bg); }
   .place-card.active { border-color: var(--primary); background: var(--bg); }
 
   .place-info { min-width: 0; }
@@ -561,8 +560,8 @@
   let mapStyleLoaded = false;
   const toiletMarkers = new Map(); // id -> maplibregl.Marker
 
-  const EMPTY_LINE = { type: "Feature", geometry: { type: "LineString", coordinates: [] }, properties: {} };
-  const EMPTY_POLY = { type: "Feature", geometry: { type: "Polygon", coordinates: [[]] }, properties: {} };
+  const EMPTY_LINE = { type: "FeatureCollection", features: [] }; // مجموعة فارغة صالحة، بدل LineString بلا نقاط
+  const EMPTY_POLY = { type: "FeatureCollection", features: [] }; // مجموعة فارغة صالحة، بدل Polygon بحلقة فارغة غير صحيحة تقنيًا
 
   let currentLat = null;
   let currentLon = null;
@@ -1464,8 +1463,11 @@
       // marker على الخريطة
       const el = elementFromHTML(iconHtmlForPlace(place));
       const speedKmh = MODES[currentMode].speedKmh;
+      const openStatus = place.openingHours ? isOpenNow(place.openingHours) : null;
+      const openStatusLine =
+        openStatus === true ? "🟢 مفتوح الآن<br>" : openStatus === false ? "🔴 مغلق الآن<br>" : "";
       const popupHtml =
-        `<b>${escapeHtml(place.name)}</b><br>${
+        `<b>${escapeHtml(place.name)}</b><br>${openStatusLine}${
           place.distance != null
             ? formatDistance(place.distance) + " · " + formatDuration(place.distance, speedKmh) + " تقريبًا<br>"
             : ""
@@ -1491,7 +1493,6 @@
 
       const categoryLabel = CATEGORY_LABELS[place.category];
       const isVisited = visited.has(place.id);
-      const openStatus = place.openingHours ? isOpenNow(place.openingHours) : null;
       let hoursTagHtml = "";
       if (openStatus === true) {
         hoursTagHtml = `<span class="tag open" title="${escapeHtml(place.openingHours)}">🟢 مفتوح الآن</span>`;
