@@ -3,16 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>أقرب دورة مياه</title>
+<title>أقرب بيت راحة</title>
 
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1d4ed8">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="دورة مياه">
+<meta name="apple-mobile-web-app-title" content="بيت راحة">
 
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
 
@@ -82,6 +83,11 @@
     align-items: center;
     justify-content: center;
     font-size: 68px;
+    animation: splashPulse 1.6s ease-in-out infinite;
+  }
+  @keyframes splashPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
   }
   #splash-title {
     color: #fff;
@@ -139,9 +145,17 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
   }
-  .icon-btn:active { background: rgba(255,255,255,0.3); }
+  .icon-btn:active { background: rgba(255,255,255,0.3); transform: scale(0.9); }
   .icon-btn.active { background: #fff; color: var(--primary); }
+  #trackBtn.active {
+    animation: livePulse 1.6s ease-in-out infinite;
+  }
+  @keyframes livePulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.55); }
+    50% { box-shadow: 0 0 0 7px rgba(255,255,255,0); }
+  }
 
   #refreshBtn {
     background: rgba(255,255,255,0.15);
@@ -204,7 +218,9 @@
     cursor: pointer;
     font-family: inherit;
     white-space: nowrap;
+    transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
   }
+  .mode-btn:active, .urgency-btn:active { transform: scale(0.94); }
   .mode-btn.active, .urgency-btn.active {
     background: var(--primary);
     border-color: var(--primary);
@@ -244,7 +260,9 @@
     cursor: pointer;
     white-space: nowrap;
     font-family: inherit;
+    transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
   }
+  .chip:active { transform: scale(0.94); }
   .chip.active {
     background: var(--primary);
     border-color: var(--primary);
@@ -292,7 +310,13 @@
     justify-content: space-between;
     align-items: center;
     gap: 10px;
-    transition: background 0.15s;
+    transition: background 0.15s, transform 0.1s ease;
+    animation: cardIn 0.35s ease both;
+  }
+  .place-card:active { transform: scale(0.985); }
+  @keyframes cardIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
   }
   .place-card:active { background: var(--bg); }
   .place-card.active { border-color: var(--primary); background: var(--bg); }
@@ -323,6 +347,8 @@
   html.dark-mode .tag { background: #1e3a5f; color: #93c5fd; }
   .tag.warn { background: #fef3c7; color: #92400e; }
   html.dark-mode .tag.warn { background: #3a2e12; color: #fbbf24; }
+  .tag.visited { background: #efe6da; color: #5c4326; }
+  html.dark-mode .tag.visited { background: #3a2e22; color: #d8bd9c; }
 
   .place-side {
     display: flex;
@@ -343,7 +369,7 @@
     white-space: nowrap;
   }
 
-  .star-btn, .delete-btn, .dir-btn {
+  .star-btn, .delete-btn, .dir-btn, .visited-btn {
     background: none;
     border: none;
     cursor: pointer;
@@ -354,7 +380,22 @@
     font-size: 19px;
     color: #d1d5db;
   }
-  .star-btn.active { color: var(--star); }
+  .star-btn.active { color: var(--star); animation: pop 0.3s ease; }
+  .visited-btn.active { animation: pop 0.3s ease; }
+  @keyframes pop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.35); }
+    100% { transform: scale(1); }
+  }
+  .visited-btn {
+    font-size: 16px;
+    opacity: 0.3;
+    filter: grayscale(1);
+  }
+  .visited-btn.active {
+    opacity: 1;
+    filter: none;
+  }
   .dir-btn {
     font-size: 16px;
   }
@@ -409,13 +450,13 @@
 
 <div id="splash">
   <div id="splash-logo">🚻</div>
-  <div id="splash-title">أقرب دورة مياه</div>
+  <div id="splash-title">أقرب بيت راحة</div>
   <div class="splash-spinner"></div>
 </div>
 
 <div id="app">
   <header>
-    <h1>🚻 أقرب دورة مياه</h1>
+    <h1>🚻 أقرب بيت راحة</h1>
     <div class="header-actions">
       <button id="addBtn" class="icon-btn" title="إضافة مكان مفقود" aria-label="إضافة مكان مفقود">➕</button>
       <button id="trackBtn" class="icon-btn" title="تتبع مباشر (GPS)" aria-label="تتبع مباشر">🛰️</button>
@@ -479,7 +520,8 @@
     theme: "tf_theme",
     favorites: "tf_favorites",
     customPlaces: "tf_custom_places",
-    mode: "tf_mode"
+    mode: "tf_mode",
+    visited: "tf_visited"
   };
 
   const statusEl = document.getElementById("status");
@@ -527,6 +569,7 @@
   let overpassPlaces = []; // من Overpass API
   let customPlaces = loadJSON(LS_KEYS.customPlaces, []); // أضافها المستخدم يدويًا
   let favorites = new Set(loadJSON(LS_KEYS.favorites, []));
+  let visited = new Set(loadJSON(LS_KEYS.visited, [])); // الأماكن اللي استخدمها المستخدم من قبل
   let addMode = false;
 
   let currentMode = localStorage.getItem(LS_KEYS.mode);
@@ -589,12 +632,21 @@
   }
   applyModeUI();
 
+  // رسالة ودّية تذكّر المستخدم يوقف ويرتاح لحظة كل ما يغيّر وسيلة التنقل
+  let restReminderTimeout = null;
+  function showRestReminder() {
+    clearTimeout(restReminderTimeout);
+    hintEl.textContent = "🧘 حابس؟ خذ نفس وارتاح ثانية!";
+    restReminderTimeout = setTimeout(updateHint, 2500);
+  }
+
   modeSelectorEl.addEventListener("click", (e) => {
     const btn = e.target.closest(".mode-btn");
     if (!btn || btn.dataset.mode === currentMode) return;
     currentMode = btn.dataset.mode;
     localStorage.setItem(LS_KEYS.mode, currentMode);
     applyModeUI();
+    showRestReminder();
     if (currentLat != null) {
       fetchToilets(currentLat, currentLon);
     } else {
@@ -603,7 +655,7 @@
   });
 
   // ---------- درجة الحاجة (عادية/ماسة) ----------
-  // "حاجة ماسة" تفعّل فلتر "دورات المياه المؤكدة فقط" تلقائيًا،
+  // "حاجة ماسة" تفعّل فلتر "بيوت الراحة المؤكدة فقط" تلقائيًا،
   // لأن المساجد/المقاهي/المطاعم غير مضمونة وما تصلح لحاجة عاجلة
   urgencySelectorEl.addEventListener("click", (e) => {
     const btn = e.target.closest(".urgency-btn");
@@ -743,8 +795,10 @@
     fast_food: makePlaceIconHTML("#db2777", "🍽️")
   };
   const customIconHTML = makePlaceIconHTML("#ea580c", "🚻");
+  const visitedIconHTML = makePlaceIconHTML("#78350f", "💩");
 
   function iconHtmlForPlace(place) {
+    if (visited.has(place.id)) return visitedIconHTML; // أماكن استخدمتها من قبل — تتميّز عن الباقي
     if (place.isCustom) return customIconHTML;
     return CATEGORY_ICON_HTML[place.category] || CATEGORY_ICON_HTML.toilet;
   }
@@ -969,7 +1023,7 @@
   addBtn.addEventListener("click", () => setAddMode(!addMode));
 
   function handleAddPlaceClick(lat, lon) {
-    const name = window.prompt("اسم المكان (اختياري):", "دورة مياه");
+    const name = window.prompt("اسم المكان (اختياري):", "بيت راحة");
     if (name === null) {
       setAddMode(false);
       return;
@@ -978,7 +1032,7 @@
       id: "custom/" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
       lat,
       lon,
-      name: name.trim() || "دورة مياه (أضافها مستخدم)",
+      name: name.trim() || "بيت راحة (أضافها مستخدم)",
       category: "toilet",
       fee: null,
       wheelchair: null,
@@ -1000,7 +1054,7 @@
 
   function updateHint() {
     hintEl.textContent = addMode
-      ? "🖊️ اضغط على أي مكان بالخريطة لإضافة دورة مياه مفقودة (سيُطلب منك اسم اختياري)."
+      ? "🖊️ اضغط على أي مكان بالخريطة لإضافة بيت راحة مفقود (سيُطلب منك اسم اختياري)."
       : "📍 إذا كان موقعك غير دقيق: اضغط على المكان الصحيح بالخريطة أو اسحب النقطة الزرقاء.";
   }
   updateHint();
@@ -1010,6 +1064,13 @@
     if (favorites.has(id)) favorites.delete(id);
     else favorites.add(id);
     saveJSON(LS_KEYS.favorites, [...favorites]);
+  }
+
+  // ---------- الأماكن المستخدمة من قبل ----------
+  function toggleVisited(id) {
+    if (visited.has(id)) visited.delete(id);
+    else visited.add(id);
+    saveJSON(LS_KEYS.visited, [...visited]);
   }
 
   // ---------- حالة الواجهة ----------
@@ -1117,12 +1178,12 @@
 
   function classifyElement(tags) {
     switch (tags.amenity) {
-      case "toilets": return { category: "toilet", fallbackName: "دورة مياه عامة" };
+      case "toilets": return { category: "toilet", fallbackName: "بيت راحة عام" };
       case "place_of_worship": return { category: "mosque", fallbackName: "مسجد" };
       case "cafe": return { category: "cafe", fallbackName: "مقهى" };
       case "restaurant": return { category: "restaurant", fallbackName: "مطعم" };
       case "fast_food": return { category: "fast_food", fallbackName: "مطعم وجبات سريعة" };
-      default: return { category: "toilet", fallbackName: "دورة مياه عامة" };
+      default: return { category: "toilet", fallbackName: "بيت راحة عام" };
     }
   }
 
@@ -1154,7 +1215,7 @@
     lastFetchAt = Date.now();
     setLineData("route-temp", []);
     setLineData("route-real", []);
-    setStatus("جارِ البحث عن دورات المياه القريبة...");
+    setStatus("جارِ البحث عن بيوت الراحة القريبة...");
     const query = buildQuery(lat, lon);
 
     try {
@@ -1202,9 +1263,9 @@
 
       const total = overpassPlaces.length + customPlaces.length;
       if (total === 0) {
-        setStatus(`لم يتم العثور على دورات مياه ضمن ${formatDistance(MODES[currentMode].radius)} من موقعك.`, "error");
+        setStatus(`لم يتم العثور على بيوت راحة ضمن ${formatDistance(MODES[currentMode].radius)} من موقعك.`, "error");
       } else {
-        setStatus(`تم العثور على ${total} دورة مياه قريبة.`);
+        setStatus(`تم العثور على ${total} بيت راحة قريب.`);
       }
 
       lastLiveRenderAt = Date.now();
@@ -1299,7 +1360,9 @@
       li.dataset.id = place.id;
 
       const categoryLabel = CATEGORY_LABELS[place.category];
+      const isVisited = visited.has(place.id);
       const tagsHtml = [
+        isVisited ? `<span class="tag visited">💩 استخدمتها من قبل</span>` : "",
         categoryLabel ? `<span class="tag warn">${categoryLabel} — قد يتوفر مرحاض للعملاء</span>` : "",
         place.fee ? `<span class="tag">${place.fee}</span>` : "",
         place.wheelchair ? `<span class="tag">${place.wheelchair}</span>` : "",
@@ -1316,6 +1379,7 @@
         </div>
         <div class="place-side">
           <button class="star-btn${isFav ? " active" : ""}" aria-label="مفضلة">${isFav ? "★" : "☆"}</button>
+          <button class="visited-btn${isVisited ? " active" : ""}" aria-label="استخدمتها من قبل" title="استخدمتها من قبل">💩</button>
           <button class="dir-btn" aria-label="الاتجاهات" title="اتجاهات">🧭</button>
           <div class="place-distance">${
             place.distance != null
@@ -1329,6 +1393,12 @@
       li.querySelector(".star-btn").addEventListener("click", (e) => {
         e.stopPropagation();
         toggleFavorite(place.id);
+        recomputeAndRender();
+      });
+
+      li.querySelector(".visited-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleVisited(place.id);
         recomputeAndRender();
       });
 

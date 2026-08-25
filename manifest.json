@@ -1,7 +1,7 @@
 {
-  "name": "أقرب دورة مياه",
-  "short_name": "دورة مياه",
-  "description": "يلاقي أقرب دورات المياه العامة حولك",
+  "name": "أقرب بيت راحة",
+  "short_name": "بيت راحة",
+  "description": "يلاقي أقرب بيوت الراحة العامة حولك",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#eaf1fb",
