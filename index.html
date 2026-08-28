@@ -94,6 +94,13 @@
     font-size: 19px;
     font-weight: 700;
   }
+  #splash-subtitle {
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 13px;
+    text-align: center;
+    max-width: 260px;
+    margin-top: -6px;
+  }
   .splash-spinner {
     width: 22px;
     height: 22px;
@@ -124,6 +131,17 @@
     align-items: center;
     gap: 6px;
     white-space: nowrap;
+  }
+  header h1 span.logo-emoji {
+    display: inline-block;
+    animation: logoWiggle 2.4s ease-in-out 1s infinite;
+  }
+  @keyframes logoWiggle {
+    0%, 85%, 100% { transform: rotate(0deg); }
+    88% { transform: rotate(-12deg); }
+    91% { transform: rotate(10deg); }
+    94% { transform: rotate(-6deg); }
+    97% { transform: rotate(0deg); }
   }
 
   .header-actions {
@@ -180,8 +198,12 @@
     flex-shrink: 0;
     display: none;
   }
-  #status.visible { display: block; }
+  #status.visible { display: block; animation: statusIn 0.25s ease both; }
   #status.error { color: var(--danger); }
+  @keyframes statusIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 
   #hint {
     padding: 6px 16px;
@@ -233,6 +255,13 @@
     background: var(--danger);
     border-color: var(--danger);
   }
+
+  /* كل وسيلة تنقل بلونها الخاص لما تكون مفعّلة — تنويع بصري لطيف بدون مبالغة */
+  .mode-btn[data-mode="walk"].active { background: #1d4ed8; border-color: #1d4ed8; }
+  .mode-btn[data-mode="bike"].active { background: #059669; border-color: #059669; }
+  .mode-btn[data-mode="scooter"].active { background: #d97706; border-color: #d97706; }
+  .mode-btn[data-mode="moto"].active { background: #db2777; border-color: #db2777; }
+  .mode-btn[data-mode="car"].active { background: #7c3aed; border-color: #7c3aed; }
 
   #searchInput {
     width: 100%;
@@ -480,12 +509,13 @@
 <div id="splash">
   <div id="splash-logo">🚻</div>
   <div id="splash-title">أقرب بيت راحة</div>
+  <div id="splash-subtitle">مرحبًا بك! 👋 نلقالك أقرب بيت راحة بثوانٍ</div>
   <div class="splash-spinner"></div>
 </div>
 
 <div id="app">
   <header>
-    <h1>🚻 أقرب بيت راحة</h1>
+    <h1><span class="logo-emoji">🚻</span> أقرب بيت راحة</h1>
     <div class="header-actions">
       <button id="addBtn" class="icon-btn" title="إضافة مكان مفقود" aria-label="إضافة مكان مفقود">➕</button>
       <button id="trackBtn" class="icon-btn" title="تتبع مباشر (GPS)" aria-label="تتبع مباشر">🛰️</button>
@@ -532,6 +562,59 @@
 <script>
 (function () {
   "use strict";
+
+  // ---------- طبقة توافق مع تطبيقات Capacitor (iOS/أندرويد) ----------
+  // على iOS، WKWebView ما يدعم navigator.geolocation إطلاقًا (بعكس أندرويد)،
+  // فلازم نمرّ عبر إضافة @capacitor/geolocation لما التطبيق يشتغل داخل غلاف Capacitor.
+  // بالمتصفح العادي (الموقع)، window.Capacitor غير موجود فتستمر navigator.geolocation عادي.
+  // نتحقق من توفّر المكوّن في كل استدعاء (مو مرة وحدة عند تحميل الصفحة)،
+  // لأن جسر Capacitor يجهّز window.Capacitor.Plugins بشكل غير متزامن أحيانًا.
+  function getCapGeo() {
+    return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SimpleGeolocation) || null;
+  }
+  let capWatchCallbackId = null;
+
+  function geoGetCurrentPosition(success, error, options) {
+    const cap = getCapGeo();
+    if (cap) {
+      cap.getCurrentPosition(options).then(success).catch(error);
+    } else if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(success, error, options);
+    } else if (error) {
+      error({ code: 2, message: "Geolocation not supported" });
+    }
+  }
+
+  function geoWatchPosition(success, error, options) {
+    const cap = getCapGeo();
+    if (cap) {
+      cap.watchPosition(options || {}, (pos, err) => {
+        if (err) {
+          if (error) error(err);
+          return;
+        }
+        if (pos) success(pos);
+      }).then((id) => {
+        capWatchCallbackId = id;
+      });
+      return "capacitor";
+    } else if (navigator.geolocation) {
+      return navigator.geolocation.watchPosition(success, error, options);
+    }
+    return null;
+  }
+
+  function geoClearWatch(id) {
+    const cap = getCapGeo();
+    if (cap) {
+      if (capWatchCallbackId) {
+        cap.clearWatch({ id: capWatchCallbackId });
+        capWatchCallbackId = null;
+      }
+    } else if (navigator.geolocation && id != null) {
+      navigator.geolocation.clearWatch(id);
+    }
+  }
 
   const MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 
@@ -980,7 +1063,7 @@
   }
 
   async function startLiveTracking() {
-    if (!navigator.geolocation) {
+    if (!getCapGeo() && !navigator.geolocation) {
       setStatus("المتصفح لا يدعم تحديد الموقع (Geolocation).", "error");
       return;
     }
@@ -989,7 +1072,7 @@
     trackBtn.classList.add("active");
     setStatus("تم تفعيل التتبع المباشر، الموقع يتحدّث تلقائيًا أثناء تحركك.");
 
-    watchId = navigator.geolocation.watchPosition(
+    watchId = geoWatchPosition(
       (pos) => {
         const { latitude, longitude, accuracy, heading } = pos.coords;
         currentLat = latitude;
@@ -1031,7 +1114,7 @@
     liveTracking = false;
     trackBtn.classList.remove("active");
     if (watchId != null) {
-      navigator.geolocation.clearWatch(watchId);
+      geoClearWatch(watchId);
       watchId = null;
     }
     window.removeEventListener("deviceorientation", handleOrientation);
@@ -1289,7 +1372,7 @@
 
   // ---------- طلب الموقع ----------
   function requestLocation() {
-    if (!navigator.geolocation) {
+    if (!getCapGeo() && !navigator.geolocation) {
       setStatus("المتصفح لا يدعم تحديد الموقع (Geolocation).", "error");
       hideSplash();
       return;
@@ -1298,7 +1381,7 @@
     setLoading(true);
     setStatus("جارِ تحديد موقعك...");
 
-    navigator.geolocation.getCurrentPosition(
+    geoGetCurrentPosition(
       (pos) => {
         const { latitude, longitude, accuracy } = pos.coords;
         setUserLocation(latitude, longitude, accuracy);
@@ -1484,9 +1567,13 @@
     });
   }
 
+  // نعرض أقرب 60 نتيجة بالحد الأقصى — نتائج أكثر من هذا (خصوصًا بوضع السيارة) تبطّئ الخريطة والقائمة
+  // بدون فايدة حقيقية، بما إنها مرتبة أصلًا حسب الأقرب
+  const MAX_RENDERED_RESULTS = 60;
+
   function recomputeAndRender() {
     const all = getAllPlacesWithDistance();
-    renderPlaces(applyFilters(all));
+    renderPlaces(applyFilters(all).slice(0, MAX_RENDERED_RESULTS));
   }
 
   // تأخير بسيط (debounce) عشان ما نعيد بناء القائمة والعلامات مع كل حرف يُكتب
